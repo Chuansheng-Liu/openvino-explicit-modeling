@@ -39,9 +39,22 @@ git clone https://huggingface.co/Qwen/Qwen3-4B
 git clone https://huggingface.co/Qwen/Qwen3.5-35B-A3B
 ```
 
+### Setup tokenizer/detokenizer
+
+```bash
+cd my_workspace
+python -m venv .venv
+.venv\Scripts\activate
+pip install openvino-tokenizers
+pip install transformers
+```
+
 ### Option #1: Use auto_tests.py
 
 ```bash
+# make sure run tests under the .venv for tokenizer/detokenizer conversion
+.venv\Scripts\activate
+
 # Run all tests from the openvino-modeling-api root
 cd d:\openvino-modeling-api
 python openvino-explicit-modeling\scripts\auto_tests.py --help
@@ -75,6 +88,9 @@ Test Output
 
 use raw command line
 ```bash
+# make sure run tests under the .venv for tokenizer/detokenizer conversion
+.venv\Scripts\activate
+
 set OV_GENAI_SAVE_OV_MODEL=1
 set OV_GENAI_USE_MODELING_API=1
 set OV_GENAI_INFLIGHT_QUANT_MODE=int4_asym
@@ -92,6 +108,9 @@ greedy_causal_lm.exe C:\data\models\Huggingface\Qwen3.5-35B-A3B "write opencl ge
 
 use run.bat
 ```bash
+# make sure run tests under the .venv for tokenizer/detokenizer conversion
+.venv\Scripts\activate
+
 cd openvino-explicit-modeling
 run.bat
 greedy_causal_lm.exe D:\data\models\Huggingface\Qwen3.5-35B-A3B "write opencl gemm kernel and host code" GPU 1 3 300 int4_asym 128 int4_asym
