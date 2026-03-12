@@ -28,6 +28,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SCRIPT_ROOT_DEFAULT = SCRIPT_DIR.parent
 TEST_IMAGE_PATH = SCRIPT_DIR / "test.jpg"
 TEST_OCR2_IMAGE_PATH = SCRIPT_DIR / "test_ocr2.png"
+TEST_AUDIO_PATH = SCRIPT_DIR / "asr_zh.wav"
 PROMPT_FILE_PATH = SCRIPT_DIR / PROMPT_FILE_NAME
 
 
@@ -45,10 +46,11 @@ TEXT_EXE_REL = (
     Path("openvino.genai")
     / "build"
     / "bin"
+    / BUILD_TYPE_TOKEN
     / "greedy_causal_lm.exe"
 )
 TEXT_WORK_DIR_REL = Path("openvino") / "bin" / "intel64" / BUILD_TYPE_TOKEN
-GENAI_BIN_REL = Path("openvino.genai") / "build" / "bin"
+GENAI_BIN_REL = Path("openvino.genai") / "build" / "bin" / BUILD_TYPE_TOKEN
 MODELING_QWEN_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_vl.exe"
 MODELING_QWEN3_5_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_5.exe"
 MODELING_DEEPSEEK_OCR2_EXE_REL = GENAI_BIN_REL / "modeling_deepseek_ocr2.exe"
@@ -57,11 +59,13 @@ MODELING_WAN_T2V_EXE_REL = GENAI_BIN_REL / "modeling_wan_t2v.exe"
 MODELING_DFLASH_EXE_REL = GENAI_BIN_REL / "modeling_dflash.exe"
 MODELING_QWEN3_TTS_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_tts.exe"
 BENCHMARK_GENAI_EXE_REL = GENAI_BIN_REL / "benchmark_genai.exe"
+MODELING_QWEN3_ASR_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_asr.exe"
 
 MODELING_ULT_EXE_REL = (
     Path("openvino.genai")
     / "build"
     / "bin"
+    / BUILD_TYPE_TOKEN
     / "test_modeling_api.exe"
 )
 PATH_PREPEND_REL = Path("openvino.genai") / "build" / "openvino_genai"
@@ -113,6 +117,25 @@ MODELING_QWEN3_TTS_ARGS = [
     "我爱北京天安门",
     "qwen3_tts_out.wav",
     "GPU",
+]
+MODELING_QWEN3_ASR_AUDIO_ARGS = [
+    "--cache-model",
+    "--wav",
+    str(TEST_AUDIO_PATH),
+    "--device",
+    "GPU",
+    "--max_new_tokens",
+    "200",
+]
+MODELING_QWEN3_ASR_TEXT_ARGS = [
+    "--cache-model",
+    "--text-only",
+    "--prompt",
+    PROMPT,
+    "--device",
+    "GPU",
+    "--max_new_tokens",
+    "200",
 ]
 MODELING_QWEN3_5_TEXT_ARGS = [
     "--cache-model",
@@ -521,6 +544,20 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
     },
+    {
+        "name": "Huggingface Qwen3-ASR-0.6B",
+        "model_rel": Path("Huggingface") / "Qwen3-ASR-0.6B",
+        "exe_rel": MODELING_QWEN3_ASR_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_ASR_AUDIO_ARGS.copy(),
+    },
+        {
+        "name": "Huggingface Qwen3-ASR-0.6B text-only",
+        "model_rel": Path("Huggingface") / "Qwen3-ASR-0.6B",
+        "exe_rel": MODELING_QWEN3_ASR_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_ASR_TEXT_ARGS.copy(),
+    },
 ]
 
 def parse_build_type(value: str) -> str:
@@ -536,6 +573,33 @@ def parse_build_type(value: str) -> str:
 
 def resolve_build_type_path(path_rel: Path, build_type: str) -> Path:
     return Path(str(path_rel).replace(BUILD_TYPE_TOKEN, build_type))
+
+
+def _remove_build_type_token_segment(path_rel: Path) -> Path:
+    rel = str(path_rel)
+    rel = rel.replace(f"{BUILD_TYPE_TOKEN}/", "")
+    rel = rel.replace(f"{BUILD_TYPE_TOKEN}\\", "")
+    return Path(rel)
+
+
+def resolve_executable_path(root: Path, exe_rel: Path, build_type: str) -> Path:
+    """Resolve exe path and auto-detect whether BUILD_TYPE_TOKEN is needed.
+
+    Preferred layout uses BUILD_TYPE_TOKEN. If the executable is not found there,
+    fall back to a no-build-type layout (e.g. .../bin/foo.exe).
+    """
+    primary = root / resolve_build_type_path(exe_rel, build_type)
+    if primary.is_file():
+        return primary
+
+    if BUILD_TYPE_TOKEN not in str(exe_rel):
+        return primary
+
+    fallback = root / _remove_build_type_token_segment(exe_rel)
+    if fallback.is_file():
+        return fallback
+
+    return primary
 
 
 def format_rel_path(path_rel: Path, build_type: Optional[str] = None) -> str:
@@ -901,7 +965,7 @@ def resolve_tests(
         resolved_test = {
             "index": str(idx),
             "name": spec["name"],
-            "exe": str(root / resolve_build_type_path(spec["exe_rel"], build_type)),
+            "exe": str(resolve_executable_path(root, spec["exe_rel"], build_type)),
             "work_dir": str(root / resolve_build_type_path(spec["work_dir_rel"], build_type)),
             "model": str(model_path) if model_path else None,
             "command_args": spec["command_args"],
