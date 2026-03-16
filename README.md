@@ -49,6 +49,32 @@ pip install openvino-tokenizers
 pip install transformers
 ```
 
+### Build wheel package
+
+```bash
+cd openvino-explicit-modeling
+build.bat --wheel
+```
+
+`build.bat --wheel` builds `openvino`, builds `openvino.genai`, and writes all wheel files plus `wheel.py` into the `wheel` folder under the directory two levels above `build.bat`.
+
+Use the existing `.venv` to install and run the wheel package:
+
+```bash
+cd my_workspace
+.venv\Scripts\activate
+pip install --no-index --find-links wheel openvino_genai
+python wheel\wheel.py --help
+```
+
+Before running `wheel.py`, first run one of the exe samples below with `--cache-model` so the cached OpenVINO IR files are generated.
+
+Then run the wheel smoke test with the cached xml file:
+
+```bash
+python wheel\wheel.py --model D:\data\models\Huggingface\Qwen3.5-35B-A3B\qwen3_5_text_q4a_b4a_g128.xml --prompt "what's ffmpeg?" --device GPU --max-new-tokens 300
+```
+
 ### Option #1: Use auto_tests.py
 
 ```bash
