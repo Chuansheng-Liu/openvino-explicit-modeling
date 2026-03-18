@@ -498,7 +498,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [INFO] OpenVINO GenAI executable files staged in: %GENAI_BIN_DIR%
+for %%I in ("%GENAI_BIN_ROOT%\*.dll") do (
+    if exist "%%~fI" copy /y "%%~fI" "%GENAI_BIN_DIR%\" >nul
+)
+if errorlevel 1 (
+    echo [ERROR] Failed to stage OpenVINO GenAI runtime DLLs into %GENAI_BIN_DIR%.
+    exit /b 1
+)
+
+echo [INFO] OpenVINO GenAI executable and runtime DLL files staged in: %GENAI_BIN_DIR%
 exit /b 0
 
 :ensure_host_python
