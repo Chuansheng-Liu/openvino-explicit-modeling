@@ -155,6 +155,7 @@ MODELING_QWEN3_5_TEXT_MTP_ARGS = [
     "--cache-model",
     "--mode",
     "text",
+    "--mtp",
     "--temperature",
     "0",
     "--prompt",
