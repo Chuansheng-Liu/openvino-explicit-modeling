@@ -271,6 +271,8 @@ QWEN3_5_35B_EXTRA_ENV = {
     "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
     "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
     "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
+    "OV_GENAI_TURBOQUANT_KV_CACHE": "1",
+    "OV_GENAI_TURBOQUANT_KV_BITS": "8",   # 4-bit needs Lloyd-Max codebooks for quality neutrality
 }
 
 TEST_SPECS: List[Dict[str, Any]] = [
