@@ -28,7 +28,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SCRIPT_ROOT_DEFAULT = SCRIPT_DIR.parent
 TEST_IMAGE_PATH = SCRIPT_DIR / "test.jpg"
 TEST_OCR2_IMAGE_PATH = SCRIPT_DIR / "test_ocr2.png"
-TEST_AUDIO_PATH = SCRIPT_DIR / "asr_zh.wav"
+TEST_AUDIO_PATH = SCRIPT_DIR / "asr_zh_60s.wav"
+ACC100_DIR = SCRIPT_DIR / "acc100"
+ACC100_WAV_DIR = ACC100_DIR / "wav"
+ACC100_TEXT_PATH = ACC100_DIR / "text"
 PROMPT_FILE_PATH = SCRIPT_DIR / PROMPT_FILE_NAME
 
 
@@ -136,8 +139,7 @@ MODELING_GLM_OCR_ARGS = [
     "GPU",
     "1000",
 ]
-MODELING_QWEN3_ASR_AUDIO_ARGS = [
-    "--cache-model",
+MODELING_QWEN3_ASR_AUDIO_DEFAULT_ARGS = [
     "--wav",
     str(TEST_AUDIO_PATH),
     "--device",
@@ -145,8 +147,53 @@ MODELING_QWEN3_ASR_AUDIO_ARGS = [
     "--max_new_tokens",
     "200",
 ]
-MODELING_QWEN3_ASR_TEXT_ARGS = [
+
+MODELING_QWEN3_ASR_AUDIO_PERF_ARGS = [
+    "--n_window",
+    "100",
+    "--n_window_infer",
+    "400",
+    "--wav",
+    str(TEST_AUDIO_PATH),
+    "--device",
+    "GPU",
+    "--max_new_tokens",
+    "200",
+]
+
+MODELING_QWEN3_ASR_AUDIO_STREAMING_ARGS = [
+    "--n_window",
+    "100",
+    "--n_window_infer",
+    "400",
+    "--streaming",
+    "--stream_chunk_sec",
+    "1",
+    "--stream_window_sec",
+    "8",
+    "--stream_unfixed_chunk_num",
+    "0",
+    "--stream_unfixed_token_num",
+    "2",
+    "--wav",
+    str(TEST_AUDIO_PATH),
+    "--device",
+    "GPU",
+    "--max_new_tokens",
+    "200",
+]
+MODELING_QWEN3_ASR_ACC100_ARGS = [
     "--cache-model",
+    "--n_window",
+    "100",
+    "--n_window_infer",
+    "400",
+    "--device",
+    "GPU",
+    "--max_new_tokens",
+    "200",
+]
+MODELING_QWEN3_ASR_TEXT_ARGS = [
     "--text-only",
     "--prompt",
     PROMPT,
@@ -589,11 +636,25 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "use_named_model_arg": True,
     },
     {
-        "name": "Huggingface Qwen3-ASR-0.6B",
+        "name": "Huggingface Qwen3-ASR-0.6B default audio",
         "model_rel": Path("Huggingface") / "Qwen3-ASR-0.6B",
         "exe_rel": MODELING_QWEN3_ASR_EXE_REL,
         "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_ASR_AUDIO_ARGS.copy(),
+        "command_args": MODELING_QWEN3_ASR_AUDIO_DEFAULT_ARGS.copy(),
+    },
+    {
+        "name": "Huggingface Qwen3-ASR-0.6B perf audio",
+        "model_rel": Path("Huggingface") / "Qwen3-ASR-0.6B",
+        "exe_rel": MODELING_QWEN3_ASR_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_ASR_AUDIO_PERF_ARGS.copy(),
+    },
+    {
+        "name": "Huggingface Qwen3-ASR-0.6B streaming audio",
+        "model_rel": Path("Huggingface") / "Qwen3-ASR-0.6B",
+        "exe_rel": MODELING_QWEN3_ASR_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_ASR_AUDIO_STREAMING_ARGS.copy(),
     },
     {
         "name": "Huggingface Qwen3-ASR-0.6B text-only",
@@ -601,6 +662,14 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "exe_rel": MODELING_QWEN3_ASR_EXE_REL,
         "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_ASR_TEXT_ARGS.copy(),
+    },
+    {
+        "name": "Huggingface Qwen3-ASR ACC100 compare",
+        "model_rel": Path("Huggingface") / "Qwen3-ASR-0.6B",
+        "exe_rel": MODELING_QWEN3_ASR_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_ASR_ACC100_ARGS.copy(),
+        "is_acc100_asr": True,
     },
     # ---------------------------------------------------------------------------
     # Perf validation: Qwen3.5-35B-A3B with variable-length prompts
@@ -908,6 +977,37 @@ def extract_generated_text(output: str) -> str:
     return text_block.strip() if text_block.strip() else "Not found in output."
 
 
+def extract_asr_text(output: str) -> str:
+    marker = "text:"
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(marker):
+            value = stripped[len(marker) :].strip()
+            return value if value else "Not found in output."
+    return "Not found in output."
+
+
+def load_acc100_entries(text_path: Path, wav_dir: Path) -> List[Dict[str, str]]:
+    entries: List[Dict[str, str]] = []
+    for raw_line in text_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid ACC100 manifest line: {raw_line}")
+        sample_id, expected_text = parts
+        wav_path = wav_dir / f"{sample_id}.wav"
+        entries.append(
+            {
+                "sample_id": sample_id,
+                "expected_text": expected_text,
+                "wav_path": str(wav_path),
+            }
+        )
+    return entries
+
+
 def build_command(exe_path: str, model_path: str, command_args: List[str]) -> List[str]:
     return [exe_path, model_path, *command_args]
 
@@ -1132,6 +1232,8 @@ def resolve_tests(
         if spec.get("is_dflash"):
             resolved_test["is_dflash"] = True
             resolved_test["draft_model"] = str(draft_model_path) if draft_model_path else None
+        if spec.get("is_acc100_asr"):
+            resolved_test["is_acc100_asr"] = True
         if spec.get("use_named_model_arg"):
             resolved_test["use_named_model_arg"] = True
         resolved.append(resolved_test)
@@ -1276,6 +1378,7 @@ def main() -> int:
         # Handle ULT test: no model path
         is_ult_test = test.get("is_ult", False)
         is_dflash_test = test.get("is_dflash", False)
+        is_acc100_asr_test = test.get("is_acc100_asr", False)
         
         if is_ult_test:
             args_list = [str(exe_path), *command_args]
@@ -1292,6 +1395,14 @@ def main() -> int:
         else:
             args_list = build_command(str(exe_path), test["model"], command_args)
         cmd_line = command_to_string(args_list)
+        if is_acc100_asr_test:
+            cmd_line = command_to_string(
+                build_command(
+                    str(exe_path),
+                    test["model"],
+                    ["--wav", "<ACC100_WAV>", *command_args],
+                )
+            )
         cd_cmd = f"cd {work_dir}"
 
         # Build env per test
@@ -1304,25 +1415,86 @@ def main() -> int:
         print(f"Test {test['index']}: {test['name']}")
         print(f"Command: {cmd_line}")
         test_start = _dt.datetime.now()
-        result = subprocess.run(
-            args_list,
-            cwd=str(work_dir),
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        if is_acc100_asr_test:
+            acc100_entries = load_acc100_entries(ACC100_TEXT_PATH, ACC100_WAV_DIR)
+            output_lines: List[str] = []
+            matches = 0
+            mismatches = 0
+            sample_failures = 0
+            for sample in acc100_entries:
+                wav_path = Path(sample["wav_path"])
+                if not wav_path.is_file():
+                    raise FileNotFoundError(f"ACC100 wav not found: {wav_path}")
+                sample_args = build_command(
+                    str(exe_path),
+                    test["model"],
+                    ["--wav", str(wav_path), *command_args],
+                )
+                sample_result = subprocess.run(
+                    sample_args,
+                    cwd=str(work_dir),
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                sample_output = sample_result.stdout or ""
+                actual_text = extract_asr_text(sample_output)
+                expected_text = sample["expected_text"]
+                if actual_text == expected_text:
+                    matches += 1
+                else:
+                    mismatches += 1
+                if sample_result.returncode != 0:
+                    sample_failures += 1
+                output_lines.extend(
+                    [
+                        f"[{sample['sample_id']}]",
+                        f"wav: {wav_path}",
+                        f"return code: {sample_result.returncode}",
+                        f"expected: {expected_text}",
+                        f"actual: {actual_text}",
+                        "",
+                    ]
+                )
+            result = subprocess.CompletedProcess(
+                args=args_list,
+                returncode=1 if sample_failures > 0 else 0,
+                stdout="\n".join(output_lines),
+            )
+            output = result.stdout or ""
+            perf_block = "\n".join(
+                [
+                    f"ACC100 samples: {len(acc100_entries)}",
+                    f"ACC100 exact matches: {matches}",
+                    f"ACC100 mismatches: {mismatches}",
+                    f"ACC100 sample failures: {sample_failures}",
+                ]
+            )
+            gen_block = output
+        else:
+            result = subprocess.run(
+                args_list,
+                cwd=str(work_dir),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
 
-        output = result.stdout or ""
+            output = result.stdout or ""
 
         # Filter debug logs for ULT tests
         if is_ult_test:
             output = filter_ult_output(output)
 
-        perf_block = extract_performance(output)
-        gen_block = extract_generated_text(output)
+        if not is_acc100_asr_test:
+            perf_block = extract_performance(output)
+            gen_block = extract_generated_text(output)
 
         # Copy Z-Image output to reports folder
         zimage_report_path: Optional[Path] = None
@@ -1377,6 +1549,11 @@ def main() -> int:
         if is_ult_test:
             print("ULT Output:")
             print(output)
+        elif is_acc100_asr_test:
+            print("Performance:")
+            print(perf_block)
+            print("Expected vs actual:")
+            print(gen_block)
         else:
             print("Performance:")
             print(perf_block)
