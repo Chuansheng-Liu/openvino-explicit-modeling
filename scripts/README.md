@@ -25,8 +25,8 @@ This README focuses on the scripts used most often:
 Before using the scripts in this directory, complete the setup in the
 **[root README.md](../README.md)**:
 
-1. Clone the workspace with `repo.bat`
-2. Build `openvino` and `openvino.genai` with `build.bat`
+1. Clone the workspace with `repo.bat` or `repo.sh`
+2. Build `openvino` and `openvino.genai` with `build.bat` or `build.sh`
 3. Create `.venv` and install `openvino-tokenizers` and `transformers`
 
 Expected workspace layout:
@@ -48,6 +48,12 @@ Quick verification:
 dir my_workspace\openvino.genai\build\bin\modeling_qwen3_5.exe
 ```
 
+Linux:
+
+```bash
+ls my_workspace/openvino.genai/build/bin/Release/modeling_qwen3_5*
+```
+
 ---
 
 ## 2. auto_tests.py — Functional Test Runner
@@ -58,7 +64,8 @@ vision-language, and image-generation samples, then writes a markdown report.
 ### What it needs
 
 - a completed OpenVINO + GenAI build
-- models under `D:\data\models` by default
+- models under `D:\data\models` by default on Windows
+- an explicit `--models-root` on Linux, because the current default is Windows-specific
 - `test.jpg` in this `scripts\` directory for VL tests
 
 ### Common commands
@@ -73,6 +80,15 @@ python openvino-explicit-modeling\scripts\auto_tests.py --tests 1~5
 python openvino-explicit-modeling\scripts\auto_tests.py --tests 1~5,7,8~10
 python openvino-explicit-modeling\scripts\auto_tests.py --tests all
 python openvino-explicit-modeling\scripts\auto_tests.py --models-root D:\data\models\custom
+```
+
+Linux:
+
+```bash
+python openvino-explicit-modeling/scripts/auto_tests.py --models-root /data/models
+python openvino-explicit-modeling/scripts/auto_tests.py --list
+python openvino-explicit-modeling/scripts/auto_tests.py --tests 0,1,2 --models-root /data/models
+python openvino-explicit-modeling/scripts/auto_tests.py --tests all --models-root /data/models
 ```
 
 ### CLI arguments
@@ -191,6 +207,16 @@ pip install -r openvino-explicit-modeling\scripts\requirements.txt
 python -m nltk.downloader punkt punkt_tab
 ```
 
+Linux:
+
+```bash
+cd my_workspace
+source .venv/bin/activate
+
+python -m pip install -r openvino-explicit-modeling/scripts/requirements.txt
+python -m nltk.downloader punkt punkt_tab
+```
+
 #### Download Qwen3.5 models
 
 The benchmark scripts default to:
@@ -198,6 +224,9 @@ The benchmark scripts default to:
 ```text
 D:\data\models\Huggingface
 ```
+
+On Linux, pass the model root explicitly if your models are stored elsewhere,
+for example `/data/models/Huggingface`.
 
 Supported model indices:
 

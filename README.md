@@ -1,17 +1,20 @@
 # OpenVINO Explicit Modeling
 
-Windows-focused PoC workspace for the OpenVINO Explicit Modeling / Modeling API.
+Windows-first PoC workspace for the OpenVINO Explicit Modeling / Modeling API,
+with Linux setup and build helpers for the same sibling-repo layout.
 
 This repository provides:
 
 - `repo.bat` to prepare the sibling-repo workspace
+- `repo.sh` to prepare the sibling-repo workspace on Linux
 - `build.bat` to build both `openvino` and `openvino.genai`
+- `build.sh` to build both `openvino` and `openvino.genai` on Linux
 - `run.bat` and `scripts/auto_tests.py` for smoke and functional checks
 - benchmark scripts under `scripts/` for LLM accuracy evaluation
 
 ## 1. Prerequisites
 
-Install the following on Windows:
+Windows:
 
 ```text
 git 2.x
@@ -21,9 +24,21 @@ uv 0.10+ (required for wheel builds and managed Python provisioning)
 python 3.10+
 ```
 
+Linux:
+
+```text
+git 2.x
+cmake 3.x
+ninja
+gcc/g++ or clang/clang++
+uv 0.10+ (required for wheel builds and managed Python provisioning)
+python 3.10+
+python3-venv
+```
+
 ## 2. Set Up the Workspace
 
-Clone this repository first, then let `repo.bat` create the sibling checkout
+Clone this repository first, then let `repo.bat` or `repo.sh` create the sibling checkout
 layout for `openvino` and `openvino.genai`.
 
 ```bat
@@ -33,13 +48,22 @@ cd openvino-explicit-modeling
 repo.bat
 ```
 
-`repo.bat` will:
+Linux:
+
+```bash
+cd my_workspace
+git clone https://github.com/liangali/openvino-explicit-modeling
+cd openvino-explicit-modeling
+bash repo.sh
+```
+
+`repo.bat` and `repo.sh` will:
 
 - clone `openvino`
 - clone `openvino.genai`
 - check out the `explicit-modeling` branch
 - initialize submodules
-- apply the oneDNN patch helper in `scripts\apply_onednn_patch.bat`
+- apply the oneDNN patch helper in `scripts\apply_onednn_patch.bat` or `scripts/apply_onednn_patch.sh`
 
 Expected workspace layout:
 
@@ -57,6 +81,13 @@ Build `openvino` and `openvino.genai` from the workspace:
 ```bat
 cd my_workspace\openvino-explicit-modeling
 build.bat
+```
+
+Linux:
+
+```bash
+cd my_workspace/openvino-explicit-modeling
+bash build.sh
 ```
 
 Optional: collect built DLL/EXE artifacts into a single package directory:
@@ -85,10 +116,22 @@ pip install openvino-tokenizers
 pip install transformers
 ```
 
+Linux:
+
+```bash
+cd my_workspace
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install openvino-tokenizers
+python -m pip install transformers
+```
+
 ## 5. Download Models
 
 For a minimal smoke-test setup, place Hugging Face models under
-`D:\data\models\Huggingface`.
+`D:\data\models\Huggingface` on Windows or a Linux path such as
+`/data/models/Huggingface`.
 
 ```bat
 cd D:\data\models\Huggingface
@@ -100,6 +143,18 @@ We could use scripts/download_models.py to download most models easily.
 ## 6. Run Samples and Functional Checks
 
 Activate `.venv` before running the commands below.
+
+Windows:
+
+```bat
+.venv\Scripts\activate
+```
+
+Linux:
+
+```bash
+source .venv/bin/activate
+```
 
 ### Option A: Run executables directly
 
@@ -137,6 +192,9 @@ cd my_workspace\openvino-explicit-modeling
 run.bat
 ```
 
+`run.bat` is Windows-only. On Linux, use the direct executable flow in Option A
+or run `auto_tests.py` with an explicit `--models-root`.
+
 ### Option C: Use `auto_tests.py`
 
 `auto_tests.py` runs functional checks and generates a markdown report under:
@@ -160,6 +218,23 @@ python openvino-explicit-modeling\scripts\auto_tests.py --models-root D:\data\mo
 python openvino-explicit-modeling\scripts\auto_tests.py --models-root D:\data\models --tests all
 ```
 
+Linux examples:
+
+```bash
+source .venv/bin/activate
+cd my_workspace
+
+python openvino-explicit-modeling/scripts/auto_tests.py --help
+python openvino-explicit-modeling/scripts/auto_tests.py --list
+python openvino-explicit-modeling/scripts/auto_tests.py --models-root /data/models
+python openvino-explicit-modeling/scripts/auto_tests.py --models-root /data/models --tests 0,1,2
+python openvino-explicit-modeling/scripts/auto_tests.py --models-root /data/models --tests 1~5
+python openvino-explicit-modeling/scripts/auto_tests.py --models-root /data/models --tests all
+```
+
+Note: `auto_tests.py` still defaults to a Windows models root, so Linux runs
+should pass `--models-root` explicitly.
+
 Report contents:
 
 - markdown summary
@@ -177,8 +252,16 @@ cd my_workspace\openvino-explicit-modeling
 build.bat --wheel --python=3.11.9
 ```
 
+Linux:
+
+```bash
+cd my_workspace/openvino-explicit-modeling
+bash build.sh --wheel --python=3.11.9
+```
+
 If `--python` is omitted, `build.bat --wheel` uses the first `python.exe` found
-in `PATH`.
+in `PATH`, and `build.sh --wheel` uses the first `python3` or `python` found in
+`PATH`.
 
 Wheel build virtual environments are reused by exact Python version under:
 
@@ -201,6 +284,15 @@ pip install --no-index --find-links wheel\cp311 openvino_genai
 python wheel\cp311\wheel.py --help
 ```
 
+Linux:
+
+```bash
+cd my_workspace
+source .venv/bin/activate
+python -m pip install --no-index --find-links wheel/cp311 openvino_genai
+python wheel/cp311/wheel.py --help
+```
+
 Before running `wheel.py`, first generate cached OpenVINO IR files by running
 one of the executable samples with `--cache-model`.
 
@@ -208,6 +300,12 @@ Example:
 
 ```bat
 python wheel\cp311\wheel.py --model D:\data\models\Huggingface\Qwen3.5-35B-A3B\qwen3_5_text_q4a_b4a_g128.xml --prompt "what's ffmpeg?" --device GPU --max-new-tokens 300
+```
+
+Linux:
+
+```bash
+python wheel/cp311/wheel.py --model /data/models/Huggingface/Qwen3.5-35B-A3B/qwen3_5_text_q4a_b4a_g128.xml --prompt "what's ffmpeg?" --device GPU --max-new-tokens 300
 ```
 
 ## 8. LLM Accuracy Benchmarks
