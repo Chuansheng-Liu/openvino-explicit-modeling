@@ -58,6 +58,7 @@ SERVING_FILES = [
     "engine.py",
     "vl_backend.py",
     "server.py",
+    "bench.py",
     "requirements.txt",
     "README.md",
 ]

@@ -164,16 +164,19 @@ class Engine:
         self._started = True
         logger.info(f"Engine started with {self.config.num_workers} worker(s)")
 
-    async def acquire_worker(self, timeout: float = 60.0) -> Worker:
+    async def acquire_worker(self, timeout: float = 300.0) -> Worker:
         """Get a free worker from the pool."""
         try:
-            return await asyncio.wait_for(self._pool.get(), timeout=timeout)
+            worker = await asyncio.wait_for(self._pool.get(), timeout=timeout)
+            logger.info(f"Worker {worker.worker_id} acquired (pool size: {self._pool.qsize()})")
+            return worker
         except asyncio.TimeoutError:
             raise RuntimeError("All workers busy, request timed out")
 
     async def release_worker(self, worker: Worker):
         """Return a worker to the pool."""
         await self._pool.put(worker)
+        logger.info(f"Worker {worker.worker_id} released (pool size: {self._pool.qsize()})")
 
     async def generate(
         self,
