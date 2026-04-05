@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from config import ServerConfig, parse_args
 from engine import Engine
+from vl_backend import VLBackend, has_image_content, decode_image_content, extract_text_from_content
 from schemas import (
     ChatChoice,
     ChatCompletionRequest,
@@ -42,16 +43,19 @@ logger = logging.getLogger("server")
 
 engine: Engine = None
 config: ServerConfig = None
+vl_backend: VLBackend = None
 
 
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global engine, config
+    global engine, config, vl_backend
     config = parse_args()
     engine = Engine(config)
+    vl_backend = VLBackend(model_path=config.model_path, device=config.device)
     logger.info(f"Starting engine: model={config.model_path}, device={config.device}, workers={config.num_workers}")
+    logger.info(f"VL backend: {'available' if vl_backend.available else 'NOT available'} (exe: {vl_backend.exe_path})")
     await engine.start()
     logger.info("Server ready")
     yield
@@ -120,6 +124,12 @@ async def chat_completions(request: ChatCompletionRequest):
     if max_tokens < 1:
         raise HTTPException(status_code=400, detail="max_tokens must be >= 1")
 
+    model_name = request.model or config.model_name
+
+    # Route VL requests (messages with images) to VL backend
+    if has_image_content(request.messages):
+        return await _handle_vl_request(request, model_name, max_tokens)
+
     messages = _messages_to_dicts(request.messages)
     tools = _tools_to_dicts(request.tools)
     stop = _get_stop_list(request.stop)
@@ -129,8 +139,6 @@ async def chat_completions(request: ChatCompletionRequest):
         prompt = engine.apply_chat_template(messages, tools=tools)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Chat template error: {e}")
-
-    model_name = request.model or config.model_name
 
     try:
         if request.stream:
@@ -143,6 +151,50 @@ async def chat_completions(request: ChatCompletionRequest):
         if "workers busy" in str(e).lower():
             raise HTTPException(status_code=503, detail="Server overloaded, try again later")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _handle_vl_request(request: ChatCompletionRequest, model_name: str, max_tokens: int):
+    """Handle vision-language requests via subprocess backend."""
+    if not vl_backend or not vl_backend.available:
+        raise HTTPException(status_code=501, detail="VL backend not available (modeling_qwen3_5.exe not found)")
+
+    # Extract image from the last user message with image content
+    image_data = None
+    text_prompt = ""
+    for msg in reversed(request.messages):
+        if msg.role == "user" and isinstance(msg.content, list):
+            image_data = await decode_image_content(msg.content)
+            text_prompt = extract_text_from_content(msg.content)
+            break
+
+    if not image_data:
+        raise HTTPException(status_code=400, detail="No valid image found in messages")
+    if not text_prompt:
+        text_prompt = "Describe this image."
+
+    try:
+        temperature = request.temperature if request.temperature is not None else 0.0
+        result = await vl_backend.generate(
+            prompt=text_prompt,
+            image_data=image_data,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        message = ChatResponseMessage(role="assistant", content=result.text)
+        return ChatCompletionResponse(
+            model=model_name,
+            choices=[ChatChoice(index=0, message=message, finish_reason="stop")],
+            usage=UsageInfo(
+                prompt_tokens=max(1, len(text_prompt) // 4),
+                completion_tokens=max(1, len(result.text) // 4),
+                total_tokens=max(2, (len(text_prompt) + len(result.text)) // 4),
+            ),
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="VL generation timed out")
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=f"VL generation failed: {e}")
 
 
 async def _complete_chat(prompt, model_name, max_tokens, temperature, top_p, top_k, stop, has_tools):
@@ -371,7 +423,12 @@ async def list_models():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": config.model_name, "workers": config.num_workers}
+    return {
+        "status": "ok",
+        "model": config.model_name,
+        "workers": config.num_workers,
+        "vl_available": vl_backend.available if vl_backend else False,
+    }
 
 
 # ── Main ────────────────────────────────────────────────────────────────────

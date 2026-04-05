@@ -13,8 +13,9 @@ class ServerConfig:
     port: int = 8000
     num_workers: int = 1
     max_tokens_default: int = 2048
-    quant_mode: str = ""  # "", "int4_asym", "int8_sym"
+    quant_mode: str = "int4_asym"
     quant_group_size: int = 128
+    quant_backup_mode: str = "int4_asym"
     model_name: str = ""  # Display name for /v1/models
 
     def __post_init__(self):
@@ -30,11 +31,13 @@ def parse_args() -> ServerConfig:
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--workers", type=int, default=1, help="Number of LLMPipeline instances")
     parser.add_argument("--max-tokens", type=int, default=2048, help="Default max tokens")
-    parser.add_argument("--quant", default="", help="Quantization mode (int4_asym, int8_sym)")
+    parser.add_argument("--quant", default="int4_asym", help="Quantization mode (int4_asym, int8_sym, none)")
     parser.add_argument("--quant-group-size", type=int, default=128)
+    parser.add_argument("--quant-backup", default="int4_asym", help="Backup quantization mode")
     parser.add_argument("--model-name", default="", help="Model display name")
 
     args = parser.parse_args()
+    quant = "" if args.quant == "none" else args.quant
     return ServerConfig(
         model_path=args.model,
         device=args.device,
@@ -42,7 +45,8 @@ def parse_args() -> ServerConfig:
         port=args.port,
         num_workers=args.workers,
         max_tokens_default=args.max_tokens,
-        quant_mode=args.quant,
+        quant_mode=quant,
         quant_group_size=args.quant_group_size,
+        quant_backup_mode="" if args.quant == "none" else args.quant_backup,
         model_name=args.model_name,
     )

@@ -149,6 +149,9 @@ class Engine:
         if self.config.quant_mode:
             os.environ["OV_GENAI_INFLIGHT_QUANT_MODE"] = self.config.quant_mode
             os.environ["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = str(self.config.quant_group_size)
+            if self.config.quant_backup_mode:
+                os.environ["OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE"] = self.config.quant_backup_mode
+            logger.info(f"Quantization: mode={self.config.quant_mode}, gs={self.config.quant_group_size}, backup={self.config.quant_backup_mode}")
 
         loop = asyncio.get_event_loop()
         for i in range(self.config.num_workers):

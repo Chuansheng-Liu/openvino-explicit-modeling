@@ -173,7 +173,7 @@ class TestChatCompletions:
                 {"role": "assistant", "content": "Hello Alice! Nice to meet you."},
                 {"role": "user", "content": "What is my name?"},
             ],
-            "max_tokens": 30,
+            "max_tokens": 100,
             "temperature": 0,
         })
         assert r.status_code == 200
