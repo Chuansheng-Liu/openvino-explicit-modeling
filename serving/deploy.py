@@ -311,13 +311,6 @@ def main():
     (runtime_out / "__init__.py").write_text(DEPLOYED_INIT_PY, encoding="utf-8")
     print(f"  {'runtime/openvino_genai/__init__.py':55s}  (generated)")
 
-    # 8) Create dummy safetensors placeholder (VL exe CLI validation requires it)
-    if include_vl:
-        dummy_st = model_out / "model.safetensors"
-        if not dummy_st.exists():
-            dummy_st.write_bytes(b"")  # empty file, never actually read with --cache-model
-            print(f"  {'model/model.safetensors':55s}  (dummy placeholder for VL exe)")
-
     # --- Scripts ---
 
     # setup.bat: creates venv, installs deps, links runtime
