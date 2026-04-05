@@ -18,7 +18,7 @@ class ServerConfig:
     quant_backup_mode: str = "int4_asym"
     model_name: str = ""  # Display name for /v1/models
     vl_exe: str = ""  # Path to modeling_qwen3_5.exe for VL
-    serve_vl: bool = False  # Use persistent VL subprocess (eliminates model load per request)
+    serve_vl: bool = True  # Use persistent VL subprocess (eliminates model load per request)
 
     def __post_init__(self):
         if not self.model_name and self.model_path:
@@ -38,7 +38,8 @@ def parse_args() -> ServerConfig:
     parser.add_argument("--quant-backup", default="int4_asym", help="Backup quantization mode")
     parser.add_argument("--model-name", default="", help="Model display name")
     parser.add_argument("--vl-exe", default="", help="Path to modeling_qwen3_5.exe for VL (auto-detected if empty)")
-    parser.add_argument("--serve-vl", action="store_true", help="Use persistent VL subprocess (eliminates model load per request)")
+    parser.add_argument("--serve-vl", action="store_true", default=True, help="Use persistent VL subprocess (default: enabled)")
+    parser.add_argument("--no-serve-vl", action="store_true", help="Disable persistent VL subprocess, use per-request mode")
 
     args = parser.parse_args()
     quant = "" if args.quant == "none" else args.quant
@@ -54,5 +55,5 @@ def parse_args() -> ServerConfig:
         quant_backup_mode="" if args.quant == "none" else args.quant_backup,
         model_name=args.model_name,
         vl_exe=args.vl_exe,
-        serve_vl=args.serve_vl,
+        serve_vl=not args.no_serve_vl,
     )
