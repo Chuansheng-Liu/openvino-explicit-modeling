@@ -4,14 +4,14 @@ VLMPipeline does NOT support Qwen3.5 via Modeling API. The VL support
 is only in the C++ modeling sample (modeling_qwen3_5.exe --mode vl).
 This module wraps that exe as a subprocess for VL requests.
 
-Limitations:
-  - No streaming for VL (subprocess runs to completion)
-  - Model loads per-request (~10s overhead, faster with --cache-model)
-  - Sequential VL processing (one at a time)
+Supports both non-streaming and streaming modes. In streaming mode,
+the exe emits JSON lines to stdout (one per token chunk) while logs
+go to stderr.
 """
 
 import asyncio
 import base64
+import json
 import logging
 import os
 import re
@@ -32,6 +32,9 @@ class VLResult:
     text: str
     load_time_ms: float = 0
     generate_time_ms: float = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    finish_reason: str = "stop"
 
 
 class VLBackend:
@@ -111,42 +114,10 @@ class VLBackend:
         think: bool,
     ) -> VLResult:
         """Execute the VL subprocess."""
-        # Save image to temp file
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
-            f.write(image_data)
-            image_path = f.name
-
-        # Save prompt to temp file (avoid shell escaping issues)
-        with tempfile.NamedTemporaryFile(suffix=".txt", mode="w", delete=False, encoding="utf-8") as f:
-            f.write(prompt)
-            prompt_path = f.name
-
+        image_path, prompt_path = self._write_temp_files(prompt, image_data)
         try:
-            cmd = [
-                self.exe_path,
-                "--model", self.model_path,
-                "--mode", "vl",
-                "--image", image_path,
-                "--prompt-file", prompt_path,
-                "--device", self.device,
-                "--output-tokens", str(max_tokens),
-                "--temperature", str(temperature),
-                "--think", "1" if think else "0",
-                "--max-pixels", str(self.max_pixels),
-            ]
-            if self.cache_model:
-                cmd.append("--cache-model")
-
-            # Set env vars for subprocess
-            env = os.environ.copy()
-            env["OV_GENAI_USE_MODELING_API"] = "1"
-            env["OV_GENAI_INFLIGHT_QUANT_MODE"] = "int4_asym"
-            env["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = "128"
-            env["OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE"] = "int4_asym"
-
-            # Ensure DLLs are findable: prepend exe's directory to PATH
-            exe_dir = str(Path(self.exe_path).parent)
-            env["PATH"] = exe_dir + os.pathsep + env.get("PATH", "")
+            cmd = self._build_cmd(image_path, prompt_path, max_tokens, temperature, think)
+            env = self._make_env()
 
             logger.info(f"VL subprocess: prompt='{prompt[:50]}...', image={len(image_data)} bytes")
             t0 = time.time()
@@ -177,12 +148,176 @@ class VLBackend:
             return VLResult(text=text, generate_time_ms=elapsed * 1000)
 
         finally:
-            # Cleanup temp files
-            for p in [image_path, prompt_path]:
+            self._cleanup_temp_files(image_path, prompt_path)
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        image_data: bytes,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        think: bool = False,
+    ):
+        """Streaming VL generation. Yields text chunks as they arrive.
+
+        Protocol: exe with --stream emits JSON lines to stdout:
+          {"text":"chunk"}          — incremental decoded text
+          {"done":true,...}         — generation complete with metadata
+        Logs/metrics go to stderr.
+
+        Yields: str chunks of generated text
+        Returns metadata via VLResult stored in self._last_stream_result
+        """
+        if not self.available:
+            raise RuntimeError(f"VL exe not found: {self.exe_path}")
+
+        async with self._lock:
+            async for chunk in self._run_subprocess_stream(
+                prompt, image_data, max_tokens, temperature, think
+            ):
+                yield chunk
+
+    async def _run_subprocess_stream(
+        self,
+        prompt: str,
+        image_data: bytes,
+        max_tokens: int,
+        temperature: float,
+        think: bool,
+    ):
+        """Execute VL subprocess in streaming mode."""
+        image_path, prompt_path = self._write_temp_files(prompt, image_data)
+        proc = None
+        try:
+            cmd = self._build_cmd(
+                image_path, prompt_path, max_tokens, temperature, think,
+                stream=True,
+            )
+            env = self._make_env()
+
+            logger.info(f"VL stream subprocess: prompt='{prompt[:50]}...', image={len(image_data)} bytes")
+            t0 = time.time()
+
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
+
+            # Drain stderr concurrently to prevent blocking
+            stderr_lines = []
+            async def _drain_stderr():
+                while True:
+                    line = await proc.stderr.readline()
+                    if not line:
+                        break
+                    stderr_lines.append(line.decode("utf-8", errors="replace"))
+            stderr_task = asyncio.create_task(_drain_stderr())
+
+            # Read stdout line by line — parse JSON streaming protocol
+            self._last_stream_result = None
+            accumulated_text = ""
+
+            while True:
+                line = await proc.stdout.readline()
+                if not line:
+                    break
+                line_str = line.decode("utf-8", errors="replace").strip()
+                if not line_str or not line_str.startswith("{"):
+                    continue  # skip non-JSON lines (log output)
+
                 try:
-                    os.unlink(p)
-                except OSError:
+                    msg = json.loads(line_str)
+                except json.JSONDecodeError:
+                    continue
+
+                if "text" in msg:
+                    chunk = msg["text"]
+                    accumulated_text += chunk
+                    yield chunk
+                elif msg.get("done"):
+                    elapsed = time.time() - t0
+                    self._last_stream_result = VLResult(
+                        text=accumulated_text,
+                        generate_time_ms=elapsed * 1000,
+                        prompt_tokens=msg.get("prompt_tokens", 0),
+                        completion_tokens=msg.get("completion_tokens", 0),
+                        finish_reason=msg.get("finish_reason", "stop"),
+                    )
+
+            await stderr_task
+            await proc.wait()
+
+            if proc.returncode != 0:
+                stderr_text = "".join(stderr_lines)
+                logger.error(f"VL stream subprocess failed (rc={proc.returncode}): {stderr_text[:500]}")
+                raise RuntimeError(f"VL generation failed: {stderr_text[:200]}")
+
+            logger.info(f"VL stream done in {time.time()-t0:.1f}s, output={len(accumulated_text)} chars")
+
+        except (asyncio.CancelledError, GeneratorExit):
+            # Client disconnected — kill subprocess
+            if proc and proc.returncode is None:
+                logger.info("VL stream cancelled, killing subprocess")
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
                     pass
+            raise
+        finally:
+            self._cleanup_temp_files(image_path, prompt_path)
+
+    def _write_temp_files(self, prompt: str, image_data: bytes) -> tuple[str, str]:
+        """Write prompt and image to temp files, return paths."""
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+            f.write(image_data)
+            image_path = f.name
+        with tempfile.NamedTemporaryFile(suffix=".txt", mode="w", delete=False, encoding="utf-8") as f:
+            f.write(prompt)
+            prompt_path = f.name
+        return image_path, prompt_path
+
+    def _build_cmd(self, image_path, prompt_path, max_tokens, temperature, think, stream=False):
+        """Build subprocess command line."""
+        cmd = [
+            self.exe_path,
+            "--model", self.model_path,
+            "--mode", "vl",
+            "--image", image_path,
+            "--prompt-file", prompt_path,
+            "--device", self.device,
+            "--output-tokens", str(max_tokens),
+            "--temperature", str(temperature),
+            "--think", "1" if think else "0",
+            "--max-pixels", str(self.max_pixels),
+        ]
+        if self.cache_model:
+            cmd.append("--cache-model")
+        if stream:
+            cmd.append("--stream")
+        return cmd
+
+    def _make_env(self):
+        """Build environment for subprocess."""
+        env = os.environ.copy()
+        env["OV_GENAI_USE_MODELING_API"] = "1"
+        env["OV_GENAI_INFLIGHT_QUANT_MODE"] = "int4_asym"
+        env["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = "128"
+        env["OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE"] = "int4_asym"
+        exe_dir = str(Path(self.exe_path).parent)
+        env["PATH"] = exe_dir + os.pathsep + env.get("PATH", "")
+        return env
+
+    @staticmethod
+    def _cleanup_temp_files(*paths):
+        """Remove temp files, ignoring errors."""
+        for p in paths:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
 
     def _parse_output(self, stdout: str) -> str:
         """Extract generated text from exe stdout.

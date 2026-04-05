@@ -176,29 +176,95 @@ async def _handle_vl_request(request: ChatCompletionRequest, model_name: str, ma
     if not text_prompt:
         text_prompt = "Describe this image."
 
-    try:
-        temperature = request.temperature if request.temperature is not None else 0.0
-        result = await vl_backend.generate(
-            prompt=text_prompt,
-            image_data=image_data,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+    temperature = request.temperature if request.temperature is not None else 0.0
 
-        message = ChatResponseMessage(role="assistant", content=result.text)
-        return ChatCompletionResponse(
-            model=model_name,
-            choices=[ChatChoice(index=0, message=message, finish_reason="stop")],
-            usage=UsageInfo(
-                prompt_tokens=max(1, len(text_prompt) // 4),
-                completion_tokens=max(1, len(result.text) // 4),
-                total_tokens=max(2, (len(text_prompt) + len(result.text)) // 4),
-            ),
-        )
+    try:
+        if request.stream:
+            return _stream_vl(text_prompt, image_data, model_name, max_tokens, temperature)
+        else:
+            result = await vl_backend.generate(
+                prompt=text_prompt,
+                image_data=image_data,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+
+            message = ChatResponseMessage(role="assistant", content=result.text)
+            return ChatCompletionResponse(
+                model=model_name,
+                choices=[ChatChoice(index=0, message=message, finish_reason=result.finish_reason)],
+                usage=UsageInfo(
+                    prompt_tokens=result.prompt_tokens or max(1, len(text_prompt) // 4),
+                    completion_tokens=result.completion_tokens or max(1, len(result.text) // 4),
+                    total_tokens=(result.prompt_tokens or max(1, len(text_prompt) // 4))
+                               + (result.completion_tokens or max(1, len(result.text) // 4)),
+                ),
+            )
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="VL generation timed out")
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"VL generation failed: {e}")
+
+
+def _stream_vl(text_prompt, image_data, model_name, max_tokens, temperature):
+    """Streaming VL response via SSE."""
+    request_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+    created = int(time.time())
+
+    async def event_generator():
+        # First chunk: role
+        chunk = ChatCompletionStreamResponse(
+            id=request_id, created=created, model=model_name,
+            choices=[StreamChoice(delta=DeltaMessage(role="assistant"))],
+        )
+        yield f"data: {chunk.model_dump_json()}\n\n"
+
+        accumulated = ""
+        try:
+            async for token in vl_backend.generate_stream(
+                prompt=text_prompt,
+                image_data=image_data,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            ):
+                accumulated += token
+
+                # Buffer <think>...</think> blocks
+                if "<think>" in accumulated and "</think>" not in accumulated:
+                    continue
+                if "</think>" in accumulated:
+                    accumulated = ""
+                    continue
+
+                chunk = ChatCompletionStreamResponse(
+                    id=request_id, created=created, model=model_name,
+                    choices=[StreamChoice(delta=DeltaMessage(content=token))],
+                )
+                yield f"data: {chunk.model_dump_json()}\n\n"
+                accumulated = ""
+
+        except Exception as e:
+            logger.error(f"VL streaming error: {e}")
+            error_chunk = {"error": {"message": str(e), "type": "server_error"}}
+            yield f"data: {json.dumps(error_chunk)}\n\n"
+
+        # Final chunk with finish_reason from subprocess metadata
+        finish_reason = "stop"
+        if vl_backend._last_stream_result:
+            finish_reason = vl_backend._last_stream_result.finish_reason
+
+        done_chunk = ChatCompletionStreamResponse(
+            id=request_id, created=created, model=model_name,
+            choices=[StreamChoice(delta=DeltaMessage(), finish_reason=finish_reason)],
+        )
+        yield f"data: {done_chunk.model_dump_json()}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 async def _complete_chat(prompt, model_name, max_tokens, temperature, top_p, top_k, stop, has_tools):
