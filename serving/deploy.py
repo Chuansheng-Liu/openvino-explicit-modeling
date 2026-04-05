@@ -87,7 +87,7 @@ GENAI_PKG_FILES = [
     "icuuc70.dll",
 ]
 
-TBB_DLLS = ["tbb12.dll", "tbbmalloc.dll"]
+TBB_DLLS = ["tbb12.dll", "tbbmalloc.dll", "tbbbind_2_5.dll"]
 
 # --- Self-contained __init__.py for deployed package -----------------------
 
@@ -155,6 +155,18 @@ def _auto_detect_paths():
     return genai_pkg, ov_bin, tbb_bin
 
 
+def _find_vl_exe() -> Path:
+    """Auto-detect modeling_qwen3_5.exe from build tree."""
+    candidates = [
+        Path(r"D:\chuansheng\src_code\explicit_modeling\openvino.genai\build\bin\Release\modeling_qwen3_5.exe"),
+        Path(r"D:\chuansheng\src_code\explicit_modeling\openvino.genai\build\bin\modeling_qwen3_5.exe"),
+    ]
+    for p in candidates:
+        if p.is_file():
+            return p
+    return None
+
+
 def _collect_file(src: Path, dst: Path, files: list, label: str = ""):
     """Add (src, dst) to files list with warning if missing."""
     if src.exists():
@@ -173,6 +185,7 @@ def main():
     parser.add_argument("--genai-pkg", help="openvino_genai site-packages dir (auto-detected)")
     parser.add_argument("--ov-bin", help="OpenVINO DLL directory (auto-detected)")
     parser.add_argument("--tbb-bin", help="TBB DLL directory (auto-detected)")
+    parser.add_argument("--vl-exe", help="Path to modeling_qwen3_5.exe (auto-detected)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be copied")
     args = parser.parse_args()
 
@@ -190,6 +203,9 @@ def main():
 
     include_vl = args.include_vl and not args.no_vl
 
+    # Auto-detect VL exe
+    vl_exe = Path(args.vl_exe) if args.vl_exe else _find_vl_exe()
+
     # Validate
     ir_xml = model_dir / "qwen3_5_text_q4a_b4a_g128.xml"
     if not ir_xml.exists():
@@ -204,12 +220,25 @@ def main():
     if not ov_bin or not ov_bin.is_dir():
         print(f"ERROR: OpenVINO DLL dir not found. Use --ov-bin or set OV_BIN_DIR env var.")
         sys.exit(1)
+    if include_vl and (not vl_exe or not vl_exe.is_file()):
+        print(f"ERROR: VL exe not found. Use --vl-exe or build modeling_qwen3_5.exe first.")
+        print(f"  (searched: {vl_exe})")
+        sys.exit(1)
+    if include_vl:
+        vl_ir = model_dir / "qwen3_5_vision.xml"
+        if not vl_ir.exists():
+            print(f"ERROR: VL IR not found: {vl_ir}")
+            print("Generate VL IR first:")
+            print(f"  modeling_qwen3_5.exe --model {model_dir} --mode vl --prompt hi --output-tokens 2 --cache-model --image <img>")
+            sys.exit(1)
 
     print(f"Source paths:")
     print(f"  Model IR:      {model_dir}")
     print(f"  GenAI package: {genai_pkg}")
     print(f"  OV DLLs:       {ov_bin}")
     print(f"  TBB DLLs:      {tbb_bin or '(not found — may already be in OV dir)'}")
+    if include_vl:
+        print(f"  VL exe:        {vl_exe}")
     print()
 
     # --- Collect all files ---
@@ -241,6 +270,10 @@ def main():
     if tbb_bin:
         for f in TBB_DLLS:
             _collect_file(tbb_bin / f, runtime_out / f, files, "TBB")
+
+    # 6) VL exe (into same runtime dir so it can find DLLs)
+    if include_vl and vl_exe:
+        files.append((vl_exe, runtime_out / "modeling_qwen3_5.exe"))
 
     # Summary
     n_model = len([1 for _, d in files if str(d).startswith(str(model_out))])
@@ -274,9 +307,16 @@ def main():
         print(f"  {dst.relative_to(output_dir)!s:55s}  ({sz:.1f} MB)")
         shutil.copy2(src, dst)
 
-    # 6) Generate self-contained __init__.py
+    # 7) Generate self-contained __init__.py
     (runtime_out / "__init__.py").write_text(DEPLOYED_INIT_PY, encoding="utf-8")
     print(f"  {'runtime/openvino_genai/__init__.py':55s}  (generated)")
+
+    # 8) Create dummy safetensors placeholder (VL exe CLI validation requires it)
+    if include_vl:
+        dummy_st = model_out / "model.safetensors"
+        if not dummy_st.exists():
+            dummy_st.write_bytes(b"")  # empty file, never actually read with --cache-model
+            print(f"  {'model/model.safetensors':55s}  (dummy placeholder for VL exe)")
 
     # --- Scripts ---
 
@@ -289,13 +329,15 @@ def main():
 
         echo [1/3] Creating Python venv...
         python -m venv venv
-        call venv\Scripts\activate.bat
+        if not exist venv\Scripts\python.exe (
+            echo ERROR: Failed to create venv. Ensure Python 3.12+ x64 is installed.
+            exit /b 1
+        )
 
         echo [2/3] Installing Python packages...
-        pip install --quiet -r serving\requirements.txt
+        venv\Scripts\pip.exe install --quiet -r serving\requirements.txt
 
         echo [3/3] Installing openvino_genai runtime...
-        REM Copy the self-contained openvino_genai package into venv site-packages
         xcopy /E /I /Y runtime\openvino_genai venv\Lib\site-packages\openvino_genai\ >nul
 
         echo.
@@ -304,15 +346,18 @@ def main():
     """).lstrip(), encoding="utf-8")
 
     # start.bat: activates venv, launches server
+    vl_exe_arg = '--vl-exe "%~dp0runtime\\openvino_genai\\modeling_qwen3_5.exe"' if include_vl else ''
     start_bat = output_dir / "start.bat"
-    start_bat.write_text(textwrap.dedent(r"""
+    start_bat.write_text(textwrap.dedent(rf"""
         @echo off
         REM Qwen3.5 OpenAI API Server
         cd /d %~dp0
-        call venv\Scripts\activate.bat 2>nul
+
+        REM Add runtime DLLs to PATH (for VL exe subprocess)
+        set "PATH=%~dp0runtime\openvino_genai;%PATH%"
 
         cd serving
-        python server.py --model "%~dp0model" --device GPU --port 8000 --model-name "Qwen3.5-4B" --quant none %*
+        "%~dp0venv\Scripts\python.exe" server.py --model "%~dp0model" --device GPU --port 8000 --model-name "Qwen3.5-4B" --quant none {vl_exe_arg} %*
     """).lstrip(), encoding="utf-8")
 
     # --- Done ---

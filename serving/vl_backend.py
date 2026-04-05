@@ -61,15 +61,27 @@ class VLBackend:
             logger.warning(f"VL exe not found: {self.exe_path} — VL requests will fail")
 
     def _find_exe(self) -> str:
-        """Auto-detect modeling_qwen3_5.exe location."""
-        candidates = [
-            r"D:\chuansheng\src_code\explicit_modeling\openvino.genai\build\bin\Release\modeling_qwen3_5.exe",
-            r"D:\chuansheng\src_code\explicit_modeling\openvino.genai\build\bin\modeling_qwen3_5.exe",
+        """Auto-detect modeling_qwen3_5.exe location.
+
+        Search order:
+        1. Deployment: runtime/openvino_genai/ (sibling to serving/)
+        2. Dev build paths (for development use)
+        """
+        # Deployment layout: serving/ is CWD, runtime/ is sibling
+        serving_dir = Path(__file__).parent
+        deploy_root = serving_dir.parent
+        deployment_candidates = [
+            deploy_root / "runtime" / "openvino_genai" / "modeling_qwen3_5.exe",
         ]
-        for p in candidates:
-            if os.path.isfile(p):
-                return p
-        return candidates[0]
+        # Dev build paths
+        dev_candidates = [
+            Path(r"D:\chuansheng\src_code\explicit_modeling\openvino.genai\build\bin\Release\modeling_qwen3_5.exe"),
+            Path(r"D:\chuansheng\src_code\explicit_modeling\openvino.genai\build\bin\modeling_qwen3_5.exe"),
+        ]
+        for p in deployment_candidates + dev_candidates:
+            if p.is_file():
+                return str(p)
+        return str(deployment_candidates[0])
 
     @property
     def available(self) -> bool:
@@ -125,12 +137,16 @@ class VLBackend:
             if self.cache_model:
                 cmd.append("--cache-model")
 
-            # Set env vars
+            # Set env vars for subprocess
             env = os.environ.copy()
             env["OV_GENAI_USE_MODELING_API"] = "1"
             env["OV_GENAI_INFLIGHT_QUANT_MODE"] = "int4_asym"
             env["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = "128"
             env["OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE"] = "int4_asym"
+
+            # Ensure DLLs are findable: prepend exe's directory to PATH
+            exe_dir = str(Path(self.exe_path).parent)
+            env["PATH"] = exe_dir + os.pathsep + env.get("PATH", "")
 
             logger.info(f"VL subprocess: prompt='{prompt[:50]}...', image={len(image_data)} bytes")
             t0 = time.time()

@@ -53,7 +53,11 @@ async def lifespan(app: FastAPI):
     global engine, config, vl_backend
     config = parse_args()
     engine = Engine(config)
-    vl_backend = VLBackend(model_path=config.model_path, device=config.device)
+    vl_backend = VLBackend(
+        model_path=config.model_path,
+        device=config.device,
+        exe_path=config.vl_exe if config.vl_exe else "",
+    )
     logger.info(f"Starting engine: model={config.model_path}, device={config.device}, workers={config.num_workers}")
     logger.info(f"VL backend: {'available' if vl_backend.available else 'NOT available'} (exe: {vl_backend.exe_path})")
     await engine.start()
