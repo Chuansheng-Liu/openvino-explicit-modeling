@@ -195,7 +195,18 @@ def bench_llm(model, context_sizes):
     results = []
     for target in context_sizes:
         filler = generate_filler_text(target)
-        messages = [{"role": "user", "content": f"请用一句话总结以下内容:\n{filler}"}]
+        # Use a prompt that reliably triggers long output for throughput measurement.
+        # /nothink disables Qwen3.5 thinking mode so ALL generated tokens are content.
+        bench_prompt = (
+            "Write a comprehensive tutorial about building a REST API with Python Flask. "
+            "Cover: project setup, routing, request handling, database integration with SQLAlchemy, "
+            "authentication with JWT, error handling, testing with pytest, and deployment. "
+            "Include code examples for each section. Be thorough and detailed."
+        )
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant. Respond in English. Answer directly and thoroughly."},
+            {"role": "user", "content": f"/nothink\nContext for reference:\n{filler}\n\n{bench_prompt}"},
+        ]
 
         # Step 1: Get prompt token count via non-streaming with max_tokens=1
         print(f"  {target:>8} ", end="", flush=True)
@@ -207,11 +218,10 @@ def bench_llm(model, context_sizes):
         prompt_tokens = nr["prompt_tokens"]
         print(f"{prompt_tokens:>10} ", end="", flush=True)
 
-        # Step 2: Streaming generation for TTFT and TPS measurement
-        # Use large max_tokens — Qwen3.5 thinking mode consumes many tokens
+        # Step 2: Streaming request — measure TTFT only
         output_tokens = 4096
         r = chat_streaming(
-            model, messages, max_tokens=output_tokens, temperature=0.7, timeout=3600
+            model, messages, max_tokens=output_tokens, temperature=0.0, timeout=3600
         )
 
         if "error" in r:
@@ -222,7 +232,6 @@ def bench_llm(model, context_sizes):
             continue
 
         ttft = r["ttft"]
-        gen_tokens = r["gen_tokens"]
         total_time = r["total_time"]
         finish = r["finish_reason"] or "?"
 
@@ -238,7 +247,21 @@ def bench_llm(model, context_sizes):
             )
             continue
 
+        # Use total completion_tokens (including thinking) for accurate TPS
+        # Streaming chunks filter thinking, so gen_tokens from chunks is unreliable.
+        # total_time - ttft = decode time for ALL tokens (think + content)
+        gen_tokens = r["gen_tokens"]  # from usage if available, else chunk_count
         gen_time = total_time - ttft
+
+        # If gen_tokens seems too low (think filtering), estimate from total time
+        # A rough check: if gen_tokens < 50 and gen_time > 2s, likely undercounted
+        if gen_tokens < 50 and gen_time > 2.0:
+            # Fallback: use non-streaming to get accurate completion_tokens
+            nr2 = chat_nonstreaming(model, messages, max_tokens=output_tokens, temperature=0.0, timeout=3600)
+            if "error" not in nr2 and nr2.get("gen_tokens", 0) > gen_tokens:
+                gen_tokens = nr2["gen_tokens"]
+                gen_time = nr2.get("total_time", gen_time) - ttft
+
         gen_tps = gen_tokens / gen_time if gen_time > 0.01 else 0
         prompt_tps = prompt_tokens / ttft if ttft > 0.01 else 0
 
