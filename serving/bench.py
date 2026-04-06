@@ -643,6 +643,24 @@ def main():
     global BASE_URL
     # Usage: python bench.py [mode] [--all-ctx] [--url URL]
 
+    # Parse args (must be before model detection to set BASE_URL correctly)
+    mode = "all"
+    ctx_sizes = CONTEXT_SIZES_SAFE
+    argv = sys.argv[1:]
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in ("perf", "tools", "all"):
+            mode = arg
+        elif arg == "--all-ctx":
+            ctx_sizes = CONTEXT_SIZES_ALL
+        elif arg == "--url" and i + 1 < len(argv):
+            i += 1
+            BASE_URL = argv[i]
+        elif arg.startswith("--url="):
+            BASE_URL = arg.split("=", 1)[1]
+        i += 1
+
     # Auto-detect which models are loaded
     try:
         req = urllib.request.Request(f"{BASE_URL}/v1/models")
@@ -657,19 +675,6 @@ def main():
     if not MODELS:
         print(f"ERROR: No models found at {BASE_URL}")
         sys.exit(1)
-
-    # Parse args
-    mode = "all"
-    ctx_sizes = CONTEXT_SIZES_SAFE
-    for i, arg in enumerate(sys.argv[1:]):
-        if arg in ("perf", "tools", "all"):
-            mode = arg
-        elif arg == "--all-ctx":
-            ctx_sizes = CONTEXT_SIZES_ALL
-        elif arg == "--url" and i + 2 < len(sys.argv):
-            BASE_URL = sys.argv[i + 2]
-        elif arg.startswith("--url="):
-            BASE_URL = arg.split("=", 1)[1]
 
     print(f"{'#' * 90}")
     print(f"  Qwen3.5 Performance Benchmark — {BASE_URL}")

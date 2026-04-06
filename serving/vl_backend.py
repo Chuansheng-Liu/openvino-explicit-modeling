@@ -258,16 +258,16 @@ class VLBackend:
         """Detect degenerate repetitive output that indicates state corruption.
 
         Common pattern: model outputs '<tool_call>!!!...' or just '!!!...'
-        This signals the infer request state is corrupted and needs restart.
+        With C++ early stop (16 repeated tokens), degenerate output may be short.
         """
-        if len(text) < 20:
+        if not text or len(text) < 10:
             return False
-        # Check if any single character dominates >80% of the text
         from collections import Counter
         counts = Counter(text)
         if counts:
             most_common_char, most_common_count = counts.most_common(1)[0]
-            if most_common_count > len(text) * 0.8:
+            # >50% single char dominance (e.g. '<tool_call>!!!...' = 16!/27 chars)
+            if most_common_count > len(text) * 0.5 and most_common_count >= 8:
                 return True
         return False
 

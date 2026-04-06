@@ -258,23 +258,36 @@ async def _handle_text_via_backend(request: ChatCompletionRequest, messages: lis
 
 async def _complete_text_via_backend(prompt: str, model_name: str, max_tokens: int,
                                      temperature: float, has_tools: bool = False):
-    """Non-streaming text completion via exe backend."""
-    result = await text_backend.generate(
-        prompt=prompt, image_data=None, max_tokens=max_tokens,
-        temperature=temperature, think=config.think, raw_prompt=True,
-    )
+    """Non-streaming text completion via exe backend with retry on degenerate output.
+    On degenerate output, restarts the exe subprocess and retries (up to 2 times for tool calls).
+    """
+    max_retries = 2 if has_tools else 0
 
-    # Strip thinking from output.
-    # When think=True: model outputs thinking, then </think>, then content → take AFTER.
-    # When think=False: model may still output content then a stray </think> then garbage → take BEFORE.
-    text = result.text
-    logger.info(f"[complete] raw output ({len(text)} chars): {text[:200]}{'...' if len(text) > 200 else ''}")
-    if "</think>" in text:
-        if config.think:
-            text = text.split("</think>", 1)[1].strip()
-        else:
-            text = text.split("</think>", 1)[0].strip()
-        logger.info(f"[complete] after think-strip ({len(text)} chars): {text[:200]}{'...' if len(text) > 200 else ''}")
+    for attempt in range(1 + max_retries):
+        result = await text_backend.generate(
+            prompt=prompt, image_data=None, max_tokens=max_tokens,
+            temperature=temperature, think=config.think, raw_prompt=True,
+        )
+
+        # Strip thinking from output.
+        text = result.text
+        logger.info(f"[complete] raw output ({len(text)} chars): {text[:200]}{'...' if len(text) > 200 else ''}")
+        if "</think>" in text:
+            if config.think:
+                text = text.split("</think>", 1)[1].strip()
+            else:
+                text = text.split("</think>", 1)[0].strip()
+            logger.info(f"[complete] after think-strip ({len(text)} chars): {text[:200]}{'...' if len(text) > 200 else ''}")
+
+        # Detect degenerate output — restart exe subprocess and retry
+        if has_tools and text_backend._is_degenerate_output(text) and attempt < max_retries:
+            logger.warning(f"[complete] Degenerate output detected (attempt {attempt+1}/{1+max_retries}), "
+                           "restarting exe subprocess and retrying...")
+            await text_backend.stop_serve()
+            await text_backend.start_serve()
+            continue
+
+        break
 
     # Parse tool calls if tools were provided
     if has_tools:
