@@ -166,6 +166,83 @@ def chat_nonstreaming(
     }
 
 
+def chat_streaming_with_tools(
+    model, messages, max_tokens=2000, temperature=0.1, timeout=120, tools=None
+):
+    """Streaming chat that accumulates tool_calls from SSE delta chunks."""
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": True,
+    }
+    if tools:
+        payload["tools"] = tools
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        f"{BASE_URL}{API_CHAT}",
+        data=data,
+        headers={"Content-Type": "application/json"},
+    )
+    t_start = time.perf_counter()
+    tc_acc = {}  # index -> {id, function: {name, arguments}}
+    content_parts = []
+    finish_reason = None
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            buffer = ""
+            for raw_line in resp:
+                line = raw_line.decode("utf-8")
+                buffer += line
+                while "\n" in buffer:
+                    line_str, buffer = buffer.split("\n", 1)
+                    line_str = line_str.strip()
+                    if not line_str or not line_str.startswith("data:"):
+                        continue
+                    json_str = line_str[5:].strip()
+                    if json_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(json_str)
+                    except json.JSONDecodeError:
+                        continue
+                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    text = delta.get("content", "")
+                    if text:
+                        content_parts.append(text)
+                    for tcd in delta.get("tool_calls") or []:
+                        idx = tcd.get("index", 0)
+                        if idx not in tc_acc:
+                            tc_acc[idx] = {
+                                "id": "",
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            }
+                        if tcd.get("id"):
+                            tc_acc[idx]["id"] = tcd["id"]
+                        fn = tcd.get("function", {})
+                        if fn.get("name"):
+                            tc_acc[idx]["function"]["name"] = fn["name"]
+                        if fn.get("arguments"):
+                            tc_acc[idx]["function"]["arguments"] += fn["arguments"]
+                    fr = chunk.get("choices", [{}])[0].get("finish_reason")
+                    if fr:
+                        finish_reason = fr
+    except Exception as e:
+        return {"error": str(e), "total_time": time.perf_counter() - t_start}
+
+    total_time = time.perf_counter() - t_start
+    tool_calls = [tc_acc[i] for i in sorted(tc_acc.keys())]
+    return {
+        "total_time": round(total_time, 3),
+        "content": "".join(content_parts),
+        "tool_calls": tool_calls,
+        "finish_reason": finish_reason,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════
 # Part 1: LLM Performance Benchmark
 # ═══════════════════════════════════════════════════════════════
@@ -290,6 +367,69 @@ def bench_llm(model, context_sizes):
 # ═══════════════════════════════════════════════════════════════
 
 
+def _parse_tool_calls(tc):
+    """Extract function names and parsed arguments from tool_calls list."""
+    fns = [t["function"]["name"] for t in tc]
+    try:
+        args = [
+            json.loads(t["function"]["arguments"])
+            if isinstance(t["function"]["arguments"], str)
+            else t["function"]["arguments"]
+            for t in tc
+        ]
+    except Exception:
+        args = [{}] * len(tc)
+    return fns, args
+
+
+def _validate_tool_result(test_name, tc, content, expected_fn, expected_check):
+    """Validate tool call result against expectations.
+    Returns (status, detail_string).
+    """
+    content = content or ""
+    has_tool_pattern = "<tool_call>" in content or "<function=" in content
+
+    # --- no_tool_needed: must NOT produce any tool call ---
+    if test_name == "no_tool_needed":
+        if not tc and not has_tool_pattern and content:
+            return "PASS", "content=yes (no tool call)"
+        if tc or has_tool_pattern:
+            return "FAIL", "incorrectly called tool"
+        return "FAIL", "no content"
+
+    # --- All other tests: expect at least one tool call ---
+    if not tc:
+        if has_tool_pattern:
+            idx = content.find("<tool_call>")
+            raw = content[idx : idx + 200] if idx >= 0 else content[-100:]
+            return "PARSE_FAIL", f"parser failed: {raw[:80]}"
+        return "FAIL", f"no tool_calls, content={content[:50]}"
+
+    fns, args = _parse_tool_calls(tc)
+    detail = f"calls={fns} args={args}"
+
+    # Validate function name
+    if expected_fn and expected_fn not in fns:
+        return "WRONG_FN", f"expected {expected_fn}, got {fns}"
+
+    # Validate expected checks (min call count, specific arg values)
+    if expected_check:
+        min_calls = expected_check.get("_min_calls")
+        if min_calls and len(tc) < min_calls:
+            return "PARTIAL", f"expected >={min_calls} calls, got {len(tc)}: {detail}"
+        target = expected_fn or fns[0]
+        matched_args = [a for f, a in zip(fns, args) if f == target]
+        for key, val in expected_check.items():
+            if key.startswith("_"):
+                continue
+            if matched_args and val is not None:
+                actual = matched_args[0].get(key)
+                if actual is not None and str(actual) != str(val):
+                    return "WRONG_ARG", f"{key}: expected={val}, got={actual} | {detail}"
+
+    return "PASS", detail[:70]
+
+
 def bench_tools(models):
     print(f"\n{'=' * 90}")
     print(f"  Tool Calling Benchmark")
@@ -341,21 +481,28 @@ def bench_tools(models):
         },
     ]
 
+    # (name, query, description, expected_fn, expected_check)
+    # expected_fn: required function name (None = special handling)
+    # expected_check: dict with arg key/value to validate, _min_calls for count
     tests = [
-        ("basic_call", "北京今天天气如何？", "Should call get_weather(city=北京)"),
-        ("multi_select", "帮我搜索一下最新的Python 3.14教程", "Should call search_web"),
-        ("no_tool_needed", "1+1等于几？请直接回答", "Should NOT call any tool"),
-        (
-            "parallel_tools",
-            "帮我查一下北京和上海的天气",
-            "Should call get_weather twice",
-        ),
-        (
-            "complex_params",
-            "搜索 OpenVINO 教程，只返回3条结果",
-            "Should call search_web with limit=3",
-        ),
-        ("multi_turn", None, "Multi-turn: call tool, get response, follow up"),
+        ("basic_call", "北京今天天气如何？",
+         "get_weather(city=北京)", "get_weather", None),
+        ("multi_select", "帮我搜索一下最新的Python 3.14教程",
+         "search_web", "search_web", None),
+        ("no_tool_needed", "1+1等于几？请直接回答",
+         "no tool call", None, None),
+        ("parallel_tools", "帮我查一下北京和上海的天气",
+         "get_weather >=2 times", "get_weather", {"_min_calls": 2}),
+        ("complex_params", "搜索 OpenVINO 教程，只返回3条结果",
+         "search_web(limit=3)", "search_web", {"limit": 3}),
+        ("multi_turn", None,
+         "multi-turn tool call", None, None),
+        ("state_leak_regr", None,
+         "3x basic_call, all must PASS", None, None),
+        ("streaming_tool", "What's the weather in London?",
+         "streaming tool call", "get_weather", None),
+        ("english_call", "What's the weather in Tokyo?",
+         "English prompt", "get_weather", None),
     ]
 
     all_results = {}
@@ -363,150 +510,124 @@ def bench_tools(models):
         print(f"\n  --- {model} ---")
         model_results = []
 
-        for test_name, query, desc in tests:
+        for test_name, query, desc, expected_fn, expected_check in tests:
+
+            # ── multi_turn: two-turn tool calling ──
             if test_name == "multi_turn":
-                # Multi-turn tool calling test
-                messages_turn1 = [{"role": "user", "content": "北京今天天气如何？"}]
-                r1 = chat_nonstreaming(
-                    model,
-                    messages_turn1,
-                    max_tokens=2000,
-                    temperature=0.1,
-                    timeout=120,
-                    tools=tools,
-                )
+                msgs1 = [{"role": "user", "content": "北京今天天气如何？"}]
+                r1 = chat_nonstreaming(model, msgs1, max_tokens=2000,
+                                       temperature=0.1, timeout=120, tools=tools)
                 if "error" in r1:
-                    print(f"  {test_name:20s}  ERROR: {r1['error'][:50]}")
-                    model_results.append(
-                        {"test": test_name, "status": "ERROR", "error": r1["error"]}
-                    )
+                    status, detail = "ERROR", r1["error"][:60]
+                    print(f"  {test_name:20s}  {status:12s}  {detail}")
+                    model_results.append({"test": test_name, "status": status})
                     continue
 
                 tc1 = r1.get("tool_calls", [])
                 content1 = r1.get("content", "")
+                if not tc1:
+                    status, detail = _validate_tool_result(
+                        "basic_call", tc1, content1, "get_weather", None)
+                    print(f"  {test_name:20s}  {status:12s}  turn1 failed: {detail}")
+                    model_results.append({"test": test_name, "status": status})
+                    continue
 
-                if tc1:
-                    # Build turn 2 with tool response
-                    messages_turn2 = messages_turn1 + [
-                        {"role": "assistant", "content": content1, "tool_calls": tc1},
-                        {
-                            "role": "tool",
-                            "content": json.dumps(
-                                {
-                                    "temperature": "22°C",
-                                    "condition": "晴天",
-                                    "humidity": "45%",
-                                }
-                            ),
-                            "tool_call_id": tc1[0].get("id", "call_1"),
-                        },
-                        {"role": "user", "content": "那上海呢？"},
-                    ]
-                    r2 = chat_nonstreaming(
-                        model,
-                        messages_turn2,
-                        max_tokens=2000,
-                        temperature=0.1,
-                        timeout=120,
-                        tools=tools,
-                    )
-                    if "error" in r2:
-                        status = "PARTIAL"
-                        detail = f"turn1=OK(tool_call), turn2=ERROR: {r2['error'][:40]}"
-                    else:
-                        tc2 = r2.get("tool_calls", [])
-                        if tc2:
-                            status = "PASS"
-                            fns = [t["function"]["name"] for t in tc2]
-                            detail = f"turn1=tool_call, turn2=tool_call({fns})"
-                        else:
-                            status = "PARTIAL"
-                            c2 = r2.get("content", "")[:40]
-                            detail = f"turn1=tool_call, turn2=text({c2})"
+                fns1, _ = _parse_tool_calls(tc1)
+                msgs2 = msgs1 + [
+                    {"role": "assistant", "content": content1, "tool_calls": tc1},
+                    {"role": "tool",
+                     "content": json.dumps({"temperature": "22°C",
+                                            "condition": "晴天", "humidity": "45%"}),
+                     "tool_call_id": tc1[0].get("id", "call_1")},
+                    {"role": "user", "content": "那上海呢？"},
+                ]
+                r2 = chat_nonstreaming(model, msgs2, max_tokens=2000,
+                                       temperature=0.1, timeout=120, tools=tools)
+                if "error" in r2:
+                    status = "PARTIAL"
+                    detail = f"turn1=OK({fns1}), turn2=ERROR: {r2['error'][:40]}"
                 else:
-                    # Check if content contains tool call pattern (Qwen3.5 format)
-                    has_tool_pattern = (
-                        "<tool_call>" in content1 or "<function=" in content1
-                    )
-                    if has_tool_pattern:
-                        status = "PARSE_FAIL"
-                        detail = f"model generated tool_call tags but parser failed"
+                    tc2 = r2.get("tool_calls", [])
+                    if tc2:
+                        fns2, _ = _parse_tool_calls(tc2)
+                        if "get_weather" in fns2:
+                            status = "PASS"
+                        else:
+                            status = "WRONG_FN"
+                        detail = f"turn1={fns1}, turn2={fns2}"
                     else:
-                        status = "FAIL"
-                        detail = f"no tool_calls, content={content1[:50]}"
+                        status = "PARTIAL"
+                        detail = f"turn1={fns1}, turn2=text({r2.get('content','')[:40]})"
 
-                print(f"  {test_name:20s}  {status:12s}  {detail}")
-                model_results.append(
-                    {"test": test_name, "status": status, "time": r1["total_time"]}
-                )
+                print(f"  {test_name:20s}  {status:12s}  {detail[:70]}")
+                model_results.append({"test": test_name, "status": status,
+                                      "time": r1["total_time"]})
                 continue
 
-            # Standard tests
+            # ── state_leak_regr: same request 3 times ──
+            if test_name == "state_leak_regr":
+                all_pass = True
+                details = []
+                for i in range(3):
+                    msgs = [{"role": "user", "content": "北京今天天气如何？"}]
+                    r = chat_nonstreaming(model, msgs, max_tokens=2000,
+                                          temperature=0.0, timeout=120, tools=tools)
+                    if "error" in r:
+                        details.append(f"#{i+1}=ERROR")
+                        all_pass = False
+                        continue
+                    tc = r.get("tool_calls", [])
+                    content = r.get("content", "")
+                    s, d = _validate_tool_result(
+                        "basic_call", tc, content, "get_weather", None)
+                    details.append(f"#{i+1}={s}")
+                    if s != "PASS":
+                        all_pass = False
+
+                status = "PASS" if all_pass else "FAIL"
+                detail = ", ".join(details)
+                print(f"  {test_name:20s}  {status:12s}  {detail}")
+                model_results.append({"test": test_name, "status": status})
+                continue
+
+            # ── streaming_tool: streaming mode tool call ──
+            if test_name == "streaming_tool":
+                msgs = [{"role": "user", "content": query}]
+                r = chat_streaming_with_tools(
+                    model, msgs, max_tokens=2000, temperature=0.0,
+                    timeout=120, tools=tools)
+                if "error" in r:
+                    status, detail = "ERROR", r["error"][:60]
+                else:
+                    tc = r.get("tool_calls", [])
+                    content = r.get("content", "")
+                    status, detail = _validate_tool_result(
+                        test_name, tc, content, expected_fn, expected_check)
+
+                print(f"  {test_name:20s}  {status:12s}  {detail[:70]}")
+                model_results.append({"test": test_name, "status": status,
+                                      "time": r.get("total_time")})
+                continue
+
+            # ── Standard tests ──
             messages = [{"role": "user", "content": query}]
             r = chat_nonstreaming(
-                model,
-                messages,
-                max_tokens=2000,
-                temperature=0.1,
-                timeout=120,
-                tools=tools,
-            )
+                model, messages, max_tokens=2000, temperature=0.1,
+                timeout=120, tools=tools)
             if "error" in r:
                 print(f"  {test_name:20s}  ERROR: {r['error'][:50]}")
                 model_results.append(
-                    {"test": test_name, "status": "ERROR", "error": r["error"]}
-                )
+                    {"test": test_name, "status": "ERROR", "error": r["error"]})
                 continue
 
             tc = r.get("tool_calls", [])
             content = r.get("content", "")
-
-            # Check if content contains tool call pattern (unparsed)
-            has_tool_pattern = "<tool_call>" in content or "<function=" in content
-
-            if test_name == "no_tool_needed":
-                if not tc and not has_tool_pattern and content:
-                    status = "PASS"
-                    detail = f"content=yes (no tool call)"
-                elif tc or has_tool_pattern:
-                    status = "FAIL"
-                    detail = f"incorrectly called tool"
-                else:
-                    status = "FAIL"
-                    detail = f"no content"
-            else:
-                if tc:
-                    status = "PASS"
-                    fns = [t["function"]["name"] for t in tc]
-                    try:
-                        args = [
-                            json.loads(t["function"]["arguments"])
-                            if isinstance(t["function"]["arguments"], str)
-                            else t["function"]["arguments"]
-                            for t in tc
-                        ]
-                    except:
-                        args = ["parse_err"]
-                    detail = f"calls={fns} args={args}"
-                elif has_tool_pattern:
-                    status = "PARSE_FAIL"
-                    # Extract the raw tool call from content
-                    idx = content.find("<tool_call>")
-                    raw = content[idx : idx + 200] if idx >= 0 else content[-100:]
-                    detail = f"model OK but parser failed: {raw[:80]}"
-                else:
-                    status = "FAIL"
-                    detail = f"no tool_calls, content={content[:50]}"
+            status, detail = _validate_tool_result(
+                test_name, tc, content, expected_fn, expected_check)
 
             print(f"  {test_name:20s}  {status:12s}  {detail[:70]}")
-            model_results.append(
-                {
-                    "test": test_name,
-                    "status": status,
-                    "time": r["total_time"],
-                    "raw_has_tool": has_tool_pattern,
-                }
-            )
+            model_results.append({"test": test_name, "status": status,
+                                  "time": r["total_time"]})
 
         all_results[model] = model_results
 
