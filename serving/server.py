@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from config import ServerConfig, parse_args
-from engine import Engine
+import openvino_genai as og
 from vl_backend import VLBackend, has_image_content, decode_image_content, extract_text_from_content
 from schemas import (
     ChatChoice,
@@ -38,22 +38,78 @@ from schemas import (
 )
 from tool_parser import parse_tool_calls
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-logger = logging.getLogger("server")
+import os as _os
+_log_dir = _os.environ.get("OV_SERVER_LOG_DIR", "")
+_file_handler = None
+if _log_dir:
+    _os.makedirs(_log_dir, exist_ok=True)
+    _log_file = _os.path.join(_log_dir, f"server_{int(time.time())}.log")
+    _file_handler = logging.FileHandler(_log_file, encoding="utf-8")
+    _file_handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+    _file_handler.setLevel(logging.DEBUG)
 
-engine: Engine = None
+def _get_logger(name: str) -> logging.Logger:
+    """Get a logger with console + optional file handler."""
+    lg = logging.getLogger(name)
+    lg.setLevel(logging.DEBUG)
+    if not lg.handlers:
+        ch = logging.StreamHandler()
+        ch.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+        ch.setLevel(logging.INFO)
+        lg.addHandler(ch)
+    if _file_handler and _file_handler not in lg.handlers:
+        lg.addHandler(_file_handler)
+    lg.propagate = False
+    return lg
+
+logger = _get_logger("server")
+_get_logger("vl_backend")
+if _file_handler:
+    logger.info(f"Logging to file: {_log_file}")
+
+tokenizer: og.Tokenizer = None
 config: ServerConfig = None
 vl_backend: VLBackend = None
-text_backend: VLBackend = None  # Text backend using exe subprocess (mode=text)
+text_backend: VLBackend = None
+
+
+def apply_chat_template(
+    messages: list[dict],
+    tools: list[dict] = None,
+    enable_thinking: bool = None,
+) -> str:
+    """Format messages using the model's chat template."""
+    kwargs = {"add_generation_prompt": True}
+    if tools:
+        kwargs["tools"] = tools
+
+    # Detect /nothink prefix in last user message
+    if enable_thinking is None:
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.lstrip().startswith("/nothink"):
+                    enable_thinking = False
+                break
+
+    if enable_thinking is not None:
+        kwargs["extra_context"] = {"enable_thinking": enable_thinking}
+
+    return tokenizer.apply_chat_template(messages, **kwargs)
 
 
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global engine, config, vl_backend, text_backend
+    global tokenizer, config, vl_backend, text_backend
     config = parse_args()
-    engine = Engine(config)
+
+    # Load tokenizer for chat template formatting
+    tokenizer = og.Tokenizer(config.model_path)
+    logger.info(f"Tokenizer loaded from {config.model_path}")
+
+    # Single VL-mode exe handles both text and VL requests.
     vl_backend = VLBackend(
         model_path=config.model_path,
         device=config.device,
@@ -61,46 +117,27 @@ async def lifespan(app: FastAPI):
         use_serve=config.serve_vl,
         mode="vl",
     )
-    text_backend = VLBackend(
-        model_path=config.model_path,
-        device=config.device,
-        exe_path=config.vl_exe if config.vl_exe else "",
-        use_serve=config.serve_vl,
-        mode="text",
-    )
-    logger.info(f"Starting engine: model={config.model_path}, device={config.device}, workers={config.num_workers}")
-    logger.info(f"VL backend: {'available' if vl_backend.available else 'NOT available'} (exe: {vl_backend.exe_path})")
-    if config.serve_vl:
-        logger.info("Serve mode enabled — starting persistent subprocesses...")
-    await engine.start()
+    text_backend = vl_backend  # Same process handles text requests too
+    logger.info(f"Backend exe: {'available' if vl_backend.available else 'NOT available'} (exe: {vl_backend.exe_path})")
 
-    # Start text backend serve process
-    if config.serve_vl and text_backend.available:
-        try:
-            await text_backend.start_serve()
-            logger.info("Text serve process started successfully")
-        except Exception as e:
-            logger.error(f"Failed to start text serve process: {e}")
-            text_backend.use_serve = False
+    if not vl_backend.available:
+        logger.error("Backend exe not available — server cannot serve requests")
 
-    # Start VL backend serve process
+    # Start single serve process for both text and VL
     if config.serve_vl and vl_backend.available:
+        logger.info("Starting persistent subprocess (handles text+VL)...")
         try:
             await vl_backend.start_serve()
-            logger.info("VL serve process started successfully")
+            logger.info("Serve process started successfully")
         except Exception as e:
-            logger.error(f"Failed to start VL serve process: {e}")
+            logger.error(f"Failed to start serve process: {e}")
             logger.info("Falling back to per-request subprocess mode")
             vl_backend.use_serve = False
 
     logger.info("Server ready")
     yield
-    if text_backend and text_backend.use_serve:
-        await text_backend.stop_serve()
     if vl_backend and vl_backend.use_serve:
         await vl_backend.stop_serve()
-    if engine:
-        await engine.shutdown()
 
 app = FastAPI(title="Qwen3.5 OpenAI API", version="0.1.0", lifespan=lifespan)
 
@@ -156,6 +193,7 @@ def _get_stop_list(stop) -> list[str]:
 
 
 @app.post("/v1/chat/completions")
+@app.post("/v3/chat/completions")
 async def chat_completions(request: ChatCompletionRequest):
     if not request.messages:
         raise HTTPException(status_code=400, detail="messages is required and must be non-empty")
@@ -165,6 +203,15 @@ async def chat_completions(request: ChatCompletionRequest):
         raise HTTPException(status_code=400, detail="max_tokens must be >= 1")
 
     model_name = request.model or config.model_name
+    last_msg = request.messages[-1].content if request.messages else ""
+    if isinstance(last_msg, list):
+        last_msg = str(last_msg)[:80]
+    else:
+        last_msg = str(last_msg)[:80]
+    n_tools = len(request.tools) if request.tools else 0
+    logger.info(f"[chat] model={model_name}, msgs={len(request.messages)}, tools={n_tools}, "
+                f"stream={request.stream}, temp={request.temperature}, max_tokens={max_tokens}, "
+                f"last_msg={last_msg!r}")
 
     # Route VL requests (messages with images) to VL backend
     if has_image_content(request.messages):
@@ -172,54 +219,45 @@ async def chat_completions(request: ChatCompletionRequest):
 
     messages = _messages_to_dicts(request.messages)
     tools = _tools_to_dicts(request.tools)
-    stop = _get_stop_list(request.stop)
 
-    # Route text requests through exe backend when available and no tools
-    # (exe backend is faster and handles think=0 properly)
-    if text_backend and text_backend.available and text_backend.use_serve and not tools:
-        return await _handle_text_via_backend(request, messages, model_name, max_tokens)
-
-    # Fallback: GenAI pipeline (needed for tool calling)
-    # Format prompt via chat template
-    try:
-        prompt = engine.apply_chat_template(messages, tools=tools)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Chat template error: {e}")
-
-    try:
-        if request.stream:
-            return _stream_chat(prompt, model_name, max_tokens, request.temperature,
-                                request.top_p, request.top_k, stop, tools is not None)
-        else:
-            return await _complete_chat(prompt, model_name, max_tokens, request.temperature,
-                                        request.top_p, request.top_k, stop, tools is not None)
-    except RuntimeError as e:
-        if "workers busy" in str(e).lower():
-            raise HTTPException(status_code=503, detail="Server overloaded, try again later")
-        raise HTTPException(status_code=500, detail=str(e))
+    # All text requests go through exe backend
+    return await _handle_text_via_backend(request, messages, model_name, max_tokens, tools)
 
 
 async def _handle_text_via_backend(request: ChatCompletionRequest, messages: list[dict],
-                                    model_name: str, max_tokens: int):
-    """Handle text chat via exe backend subprocess (faster, proper think control)."""
+                                    model_name: str, max_tokens: int,
+                                    tools: list[dict] = None):
+    """Handle text chat via exe backend subprocess (all text including tool calls)."""
     # Apply chat template in Python, send pre-formatted prompt to exe with raw_prompt=True
     try:
-        prompt = engine.apply_chat_template(messages, enable_thinking=config.think)
+        prompt = apply_chat_template(messages, tools=tools, enable_thinking=config.think)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Chat template error: {e}")
 
-    temperature = request.temperature if request.temperature is not None else 0.0
+    temperature = request.temperature if request.temperature is not None else 1.0
+    has_tools = tools is not None
+    # Force greedy decoding for tool calling — prevents degenerate repetition loops
+    if has_tools:
+        temperature = 0.0
+
+    logger.info(f"[text_backend] has_tools={has_tools}, temperature={temperature}, "
+                f"max_tokens={max_tokens}, stream={request.stream}, think={config.think}, "
+                f"prompt_len={len(prompt)}")
+    if has_tools:
+        logger.debug(f"[text_backend] prompt_tail=...{prompt[-300:]}")
 
     try:
         if request.stream:
-            return _stream_text_via_backend(prompt, model_name, max_tokens, temperature)
+            return _stream_text_via_backend(prompt, model_name, max_tokens, temperature, has_tools)
         else:
-            return await _complete_text_via_backend(prompt, model_name, max_tokens, temperature)
+            return await _complete_text_via_backend(prompt, model_name, max_tokens, temperature, has_tools)
     except RuntimeError as e:
+        logger.error(f"[text_backend] RuntimeError: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _complete_text_via_backend(prompt: str, model_name: str, max_tokens: int, temperature: float):
+async def _complete_text_via_backend(prompt: str, model_name: str, max_tokens: int,
+                                     temperature: float, has_tools: bool = False):
     """Non-streaming text completion via exe backend."""
     result = await text_backend.generate(
         prompt=prompt, image_data=None, max_tokens=max_tokens,
@@ -230,11 +268,29 @@ async def _complete_text_via_backend(prompt: str, model_name: str, max_tokens: i
     # When think=True: model outputs thinking, then </think>, then content → take AFTER.
     # When think=False: model may still output content then a stray </think> then garbage → take BEFORE.
     text = result.text
+    logger.info(f"[complete] raw output ({len(text)} chars): {text[:200]}{'...' if len(text) > 200 else ''}")
     if "</think>" in text:
         if config.think:
             text = text.split("</think>", 1)[1].strip()
         else:
             text = text.split("</think>", 1)[0].strip()
+        logger.info(f"[complete] after think-strip ({len(text)} chars): {text[:200]}{'...' if len(text) > 200 else ''}")
+
+    # Parse tool calls if tools were provided
+    if has_tools:
+        parsed = parse_tool_calls(text)
+        logger.info(f"[complete] tool_parse: content={parsed.content!r:.100}, "
+                     f"tool_calls={len(parsed.tool_calls) if parsed.tool_calls else 0}, "
+                     f"finish_reason={parsed.finish_reason}")
+        message = ChatResponseMessage(
+            role="assistant",
+            content=parsed.content,
+            tool_calls=parsed.tool_calls,
+        )
+        finish_reason = parsed.finish_reason
+    else:
+        message = ChatResponseMessage(role="assistant", content=text)
+        finish_reason = result.finish_reason or "stop"
 
     request_id = f"chatcmpl-{int(time.time()*1000)}"
     return ChatCompletionResponse(
@@ -242,8 +298,8 @@ async def _complete_text_via_backend(prompt: str, model_name: str, max_tokens: i
         created=int(time.time()),
         model=model_name,
         choices=[ChatChoice(
-            message=ChatResponseMessage(role="assistant", content=text),
-            finish_reason=result.finish_reason or "stop",
+            message=message,
+            finish_reason=finish_reason,
         )],
         usage=UsageInfo(
             prompt_tokens=result.prompt_tokens,
@@ -253,8 +309,9 @@ async def _complete_text_via_backend(prompt: str, model_name: str, max_tokens: i
     )
 
 
-def _stream_text_via_backend(prompt: str, model_name: str, max_tokens: int, temperature: float):
-    """Streaming text completion via exe backend."""
+def _stream_text_via_backend(prompt: str, model_name: str, max_tokens: int,
+                             temperature: float, has_tools: bool = False):
+    """Streaming text completion via exe backend with think filtering and tool call detection."""
     request_id = f"chatcmpl-{int(time.time()*1000)}"
     created = int(time.time())
 
@@ -266,78 +323,112 @@ def _stream_text_via_backend(prompt: str, model_name: str, max_tokens: int, temp
         )
         yield f"data: {chunk.model_dump_json()}\n\n"
 
-        # Think handling depends on config.think:
-        # - think=True: model outputs thinking first, then </think>, then content.
-        #   Buffer until </think>, discard thinking, emit content after.
-        # - think=False: model outputs content directly, but may hallucinate
-        #   a stray </think> followed by garbage. Emit tokens normally but
-        #   stop if </think> appears (treat it as a stop sequence).
         accumulated = ""
-        if config.think:
-            # Think=ON: buffer until </think>, then emit content
-            think_done = False
-            try:
-                async for token in text_backend.generate_stream(
-                    prompt=prompt, image_data=None, max_tokens=max_tokens,
-                    temperature=temperature, think=config.think, raw_prompt=True,
-                ):
-                    if not think_done:
-                        accumulated += token
-                        if "</think>" not in accumulated:
-                            continue
-                        remainder = accumulated.split("</think>", 1)[1]
-                        think_done = True
-                        if not remainder.strip():
-                            continue
-                        token = remainder.lstrip()
+        think_done = not config.think  # Skip think filtering if think=OFF
+        emitted_tool_calls = False
+        tool_call_index = 0
+        buffering_tool = False
+        _TAG_PREFIX = "<tool_call>"
 
-                    chunk = ChatCompletionStreamResponse(
-                        id=request_id, created=created, model=model_name,
-                        choices=[StreamChoice(delta=DeltaMessage(content=token))],
-                    )
-                    yield f"data: {chunk.model_dump_json()}\n\n"
+        try:
+            async for token in text_backend.generate_stream(
+                prompt=prompt, image_data=None, max_tokens=max_tokens,
+                temperature=temperature, think=config.think, raw_prompt=True,
+            ):
+                accumulated += token
 
-            except Exception as e:
-                logger.error(f"Text backend streaming error: {e}")
-                error_chunk = {"error": {"message": str(e), "type": "server_error"}}
-                yield f"data: {json.dumps(error_chunk)}\n\n"
-        else:
-            # Think=OFF: emit tokens directly, stop at </think> if it appears
-            try:
-                async for token in text_backend.generate_stream(
-                    prompt=prompt, image_data=None, max_tokens=max_tokens,
-                    temperature=temperature, think=config.think, raw_prompt=True,
-                ):
-                    accumulated += token
-                    if "</think>" in accumulated:
-                        # Emit only the part before </think>, then stop
-                        before = accumulated.split("</think>", 1)[0]
-                        # Find how much of 'before' we haven't emitted yet
-                        already_emitted = len(accumulated) - len(token)
-                        new_content = before[already_emitted:]
-                        if new_content.strip():
-                            chunk = ChatCompletionStreamResponse(
+                # Phase 1: Think filtering
+                if not think_done:
+                    if "</think>" not in accumulated:
+                        continue
+                    remainder = accumulated.split("</think>", 1)[1]
+                    think_done = True
+                    accumulated = remainder
+                    if not accumulated.strip():
+                        accumulated = ""
+                        continue
+                    token = accumulated
+
+                # Phase 1b: think=OFF stop at stray </think>
+                if not config.think and "</think>" in accumulated:
+                    before = accumulated.split("</think>", 1)[0]
+                    already_len = len(accumulated) - len(token)
+                    new_content = before[already_len:]
+                    if new_content.strip():
+                        c = ChatCompletionStreamResponse(
+                            id=request_id, created=created, model=model_name,
+                            choices=[StreamChoice(delta=DeltaMessage(content=new_content))],
+                        )
+                        yield f"data: {c.model_dump_json()}\n\n"
+                    break
+
+                # Phase 2: Tool call detection
+                if has_tools:
+                    if not buffering_tool:
+                        for plen in range(1, len(_TAG_PREFIX) + 1):
+                            if accumulated.endswith(_TAG_PREFIX[:plen]):
+                                buffering_tool = True
+                                break
+
+                    if "<tool_call>" in accumulated and "</tool_call>" not in accumulated:
+                        buffering_tool = True
+                        continue
+
+                    if "</tool_call>" in accumulated:
+                        parsed = parse_tool_calls(accumulated)
+                        if parsed.content:
+                            c = ChatCompletionStreamResponse(
                                 id=request_id, created=created, model=model_name,
-                                choices=[StreamChoice(delta=DeltaMessage(content=new_content))],
+                                choices=[StreamChoice(delta=DeltaMessage(content=parsed.content))],
                             )
-                            yield f"data: {chunk.model_dump_json()}\n\n"
-                        break
+                            yield f"data: {c.model_dump_json()}\n\n"
+                        if parsed.tool_calls:
+                            for tc in parsed.tool_calls:
+                                tc_chunk = ChatCompletionStreamResponse(
+                                    id=request_id, created=created, model=model_name,
+                                    choices=[StreamChoice(delta=DeltaMessage(
+                                        tool_calls=[{
+                                            "index": tool_call_index,
+                                            "id": tc.id,
+                                            "type": "function",
+                                            "function": {
+                                                "name": tc.function.name,
+                                                "arguments": tc.function.arguments,
+                                            },
+                                        }],
+                                    ))],
+                                )
+                                yield f"data: {tc_chunk.model_dump_json()}\n\n"
+                                tool_call_index += 1
+                            emitted_tool_calls = True
+                        accumulated = ""
+                        buffering_tool = False
+                        continue
 
-                    chunk = ChatCompletionStreamResponse(
-                        id=request_id, created=created, model=model_name,
-                        choices=[StreamChoice(delta=DeltaMessage(content=token))],
-                    )
-                    yield f"data: {chunk.model_dump_json()}\n\n"
+                    if buffering_tool:
+                        continue
 
-            except Exception as e:
-                logger.error(f"Text backend streaming error: {e}")
-                error_chunk = {"error": {"message": str(e), "type": "server_error"}}
-                yield f"data: {json.dumps(error_chunk)}\n\n"
+                # Phase 3: Regular content
+                chunk = ChatCompletionStreamResponse(
+                    id=request_id, created=created, model=model_name,
+                    choices=[StreamChoice(delta=DeltaMessage(content=token))],
+                )
+                yield f"data: {chunk.model_dump_json()}\n\n"
+                accumulated = ""
+
+        except Exception as e:
+            logger.error(f"Text backend streaming error: {e}")
+            logger.error(f"[stream] accumulated at error ({len(accumulated)} chars): {accumulated[:300]}")
+            error_chunk = {"error": {"message": str(e), "type": "server_error"}}
+            yield f"data: {json.dumps(error_chunk)}\n\n"
 
         # Final chunk
+        finish_reason = "tool_calls" if emitted_tool_calls else "stop"
+        logger.info(f"[stream] done: finish_reason={finish_reason}, accumulated_len={len(accumulated)}, "
+                     f"tool_calls_emitted={tool_call_index}")
         final = ChatCompletionStreamResponse(
             id=request_id, created=created, model=model_name,
-            choices=[StreamChoice(delta=DeltaMessage(), finish_reason="stop")],
+            choices=[StreamChoice(delta=DeltaMessage(), finish_reason=finish_reason)],
         )
         yield f"data: {final.model_dump_json()}\n\n"
         yield "data: [DONE]\n\n"
@@ -364,7 +455,7 @@ async def _handle_vl_request(request: ChatCompletionRequest, model_name: str, ma
     if not text_prompt:
         text_prompt = "Describe this image."
 
-    temperature = request.temperature if request.temperature is not None else 0.0
+    temperature = request.temperature if request.temperature is not None else 1.0
 
     try:
         if request.stream:
@@ -508,188 +599,58 @@ def _stream_vl(text_prompt, image_data, model_name, max_tokens, temperature):
     )
 
 
-async def _complete_chat(prompt, model_name, max_tokens, temperature, top_p, top_k, stop, has_tools):
-    """Non-streaming chat completion."""
-    result = await engine.generate(prompt, max_tokens, temperature, top_p, top_k, stop)
-
-    # Strip thinking blocks: model output may contain just "...thinking...</think>content"
-    # (the opening <think> was in the prompt, not model output)
-    text = result.text
-    if "</think>" in text:
-        text = text.split("</think>", 1)[1].strip()
-    elif text.lstrip().startswith("Thinking Process:") or text.lstrip().startswith("**Thinking"):
-        # Model output is all thinking without </think> tag (ran out of tokens)
-        text = ""
-    else:
-        import re
-        text = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL).strip()
-
-    # Parse tool calls if tools were provided
-    if has_tools:
-        parsed = parse_tool_calls(text)
-        message = ChatResponseMessage(
-            role="assistant",
-            content=parsed.content,
-            tool_calls=parsed.tool_calls,
-        )
-        finish_reason = parsed.finish_reason
-    else:
-        message = ChatResponseMessage(role="assistant", content=text)
-        finish_reason = result.finish_reason
-
-    return ChatCompletionResponse(
-        model=model_name,
-        choices=[ChatChoice(index=0, message=message, finish_reason=finish_reason)],
-        usage=UsageInfo(
-            prompt_tokens=result.prompt_tokens,
-            completion_tokens=result.completion_tokens,
-            total_tokens=result.prompt_tokens + result.completion_tokens,
-        ),
-    )
-
-
-def _stream_chat(prompt, model_name, max_tokens, temperature, top_p, top_k, stop, has_tools):
-    """Streaming chat completion via SSE."""
-    request_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
-    created = int(time.time())
-
-    async def event_generator():
-        # First chunk: role
-        chunk = ChatCompletionStreamResponse(
-            id=request_id,
-            created=created,
-            model=model_name,
-            choices=[StreamChoice(delta=DeltaMessage(role="assistant"))],
-        )
-        yield f"data: {chunk.model_dump_json()}\n\n"
-
-        accumulated = ""
-        emitted_tool_calls = False
-        tool_call_index = 0
-        buffering_tool = False
-        think_done = False
-        # Track if we might be in a tag prefix (for partial tag detection)
-        _TAG_PREFIX = "<tool_call>"
-
-        try:
-            async for token in engine.generate_stream(
-                prompt, max_tokens, temperature, top_p, top_k, stop,
-            ):
-                accumulated += token
-
-                # Phase 1: Buffer thinking until </think> is found
-                if not think_done:
-                    if "</think>" not in accumulated:
-                        continue
-                    accumulated = accumulated.split("</think>", 1)[1]
-                    think_done = True
-                    if not accumulated.strip():
-                        accumulated = ""
-                        continue
-
-                # Phase 2: Tool call detection (only after thinking is done)
-                if has_tools:
-                    # Check if we're starting to buffer a potential tool call
-                    if not buffering_tool:
-                        # Check if accumulated ends with a prefix of <tool_call>
-                        for plen in range(1, len(_TAG_PREFIX) + 1):
-                            if accumulated.endswith(_TAG_PREFIX[:plen]):
-                                buffering_tool = True
-                                break
-
-                    if "<tool_call>" in accumulated and "</tool_call>" not in accumulated:
-                        # Inside a tool call block — keep buffering
-                        buffering_tool = True
-                        continue
-
-                    if "</tool_call>" in accumulated:
-                        # Complete tool call — parse and emit
-                        parsed = parse_tool_calls(accumulated)
-                        # Emit any text content before the tool call
-                        if parsed.content:
-                            content_chunk = ChatCompletionStreamResponse(
-                                id=request_id, created=created, model=model_name,
-                                choices=[StreamChoice(delta=DeltaMessage(content=parsed.content))],
-                            )
-                            yield f"data: {content_chunk.model_dump_json()}\n\n"
-
-                        if parsed.tool_calls:
-                            for tc in parsed.tool_calls:
-                                tc_chunk = ChatCompletionStreamResponse(
-                                    id=request_id, created=created, model=model_name,
-                                    choices=[StreamChoice(delta=DeltaMessage(
-                                        tool_calls=[{
-                                            "index": tool_call_index,
-                                            "id": tc.id,
-                                            "type": "function",
-                                            "function": {
-                                                "name": tc.function.name,
-                                                "arguments": tc.function.arguments,
-                                            },
-                                        }],
-                                    ))],
-                                )
-                                yield f"data: {tc_chunk.model_dump_json()}\n\n"
-                                tool_call_index += 1
-                            emitted_tool_calls = True
-
-                        accumulated = ""
-                        buffering_tool = False
-                        continue
-
-                    if buffering_tool:
-                        # Still might be a partial tag — keep buffering
-                        continue
-
-                # Regular content token (or no tools)
-                chunk = ChatCompletionStreamResponse(
-                    id=request_id, created=created, model=model_name,
-                    choices=[StreamChoice(delta=DeltaMessage(content=token))],
-                )
-                yield f"data: {chunk.model_dump_json()}\n\n"
-                accumulated = ""
-
-        except Exception as e:
-            logger.error(f"Streaming error: {e}")
-            # Emit error as a final chunk
-            error_chunk = {"error": {"message": str(e), "type": "server_error"}}
-            yield f"data: {json.dumps(error_chunk)}\n\n"
-
-        # Final chunk with correct finish_reason
-        finish_reason = "tool_calls" if emitted_tool_calls else "stop"
-        done_chunk = ChatCompletionStreamResponse(
-            id=request_id, created=created, model=model_name,
-            choices=[StreamChoice(delta=DeltaMessage(), finish_reason=finish_reason)],
-        )
-        yield f"data: {done_chunk.model_dump_json()}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
 
 # ── Text Completions ────────────────────────────────────────────────────────
 
 
 @app.post("/v1/completions")
+@app.post("/v3/completions")
 async def completions(request: CompletionRequest):
     prompt = request.prompt if isinstance(request.prompt, str) else request.prompt[0]
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
 
     max_tokens = request.max_tokens or config.max_tokens_default
-    stop = _get_stop_list(request.stop)
     model_name = request.model or config.model_name
+    temperature = request.temperature if request.temperature is not None else 1.0
+
+    result = await text_backend.generate(
+        prompt=prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        raw_prompt=True,
+    )
 
     if request.stream:
-        return _stream_completion(prompt, model_name, max_tokens, request.temperature,
-                                  request.top_p, request.top_k, stop)
+        # For streaming completions, wrap result as SSE
+        request_id = f"cmpl-{uuid.uuid4().hex[:12]}"
+        created = int(time.time())
 
-    result = await engine.generate(prompt, max_tokens, request.temperature,
-                                   request.top_p, request.top_k, stop)
+        async def event_generator():
+            chunk = {
+                "id": request_id,
+                "object": "text_completion",
+                "created": created,
+                "model": model_name,
+                "choices": [{"index": 0, "text": result.text, "finish_reason": None}],
+            }
+            yield f"data: {json.dumps(chunk)}\n\n"
+            done = {
+                "id": request_id,
+                "object": "text_completion",
+                "created": created,
+                "model": model_name,
+                "choices": [{"index": 0, "text": "", "finish_reason": "stop"}],
+            }
+            yield f"data: {json.dumps(done)}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     return CompletionResponse(
         model=model_name,
         choices=[CompletionChoice(index=0, text=result.text, finish_reason=result.finish_reason)],
@@ -701,44 +662,11 @@ async def completions(request: CompletionRequest):
     )
 
 
-def _stream_completion(prompt, model_name, max_tokens, temperature, top_p, top_k, stop):
-    request_id = f"cmpl-{uuid.uuid4().hex[:12]}"
-    created = int(time.time())
-
-    async def event_generator():
-        async for token in engine.generate_stream(
-            prompt, max_tokens, temperature, top_p, top_k, stop,
-        ):
-            chunk = {
-                "id": request_id,
-                "object": "text_completion",
-                "created": created,
-                "model": model_name,
-                "choices": [{"index": 0, "text": token, "finish_reason": None}],
-            }
-            yield f"data: {json.dumps(chunk)}\n\n"
-
-        done = {
-            "id": request_id,
-            "object": "text_completion",
-            "created": created,
-            "model": model_name,
-            "choices": [{"index": 0, "text": "", "finish_reason": "stop"}],
-        }
-        yield f"data: {json.dumps(done)}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
 # ── Models & Health ─────────────────────────────────────────────────────────
 
 
 @app.get("/v1/models")
+@app.get("/v3/models")
 async def list_models():
     return ModelList(data=[
         ModelInfo(id=config.model_name, created=int(time.time())),

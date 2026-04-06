@@ -71,6 +71,8 @@ class VLBackend:
         self._serve_proc: Optional[asyncio.subprocess.Process] = None
         self._serve_ready = False
         self._stderr_task: Optional[asyncio.Task] = None
+        self._serve_needs_drain = False  # True after cancelled request
+        self._serve_needs_restart = False  # True after degenerate output detected
 
         # Find exe
         if exe_path:
@@ -218,7 +220,56 @@ class VLBackend:
         if not self._serve_proc or self._serve_proc.returncode is not None:
             logger.warning("Serve process not running, restarting...")
             self._serve_ready = False
+            self._serve_needs_drain = False
             await self.start_serve()
+
+    async def _drain_cancelled_output(self):
+        """Drain leftover output from a previously cancelled serve request."""
+        logger.info("Draining leftover output from cancelled request...")
+        try:
+            while True:
+                line = await asyncio.wait_for(
+                    self._serve_proc.stdout.readline(),
+                    timeout=30,
+                )
+                if not line:
+                    break
+                line_str = line.decode("utf-8", errors="replace").strip()
+                if not line_str or not line_str.startswith("{"):
+                    continue
+                try:
+                    msg = json.loads(line_str)
+                    if msg.get("done") or "error" in msg:
+                        logger.info("Drain complete — subprocess ready for next request")
+                        break
+                except json.JSONDecodeError:
+                    continue
+        except asyncio.TimeoutError:
+            logger.warning("Drain timed out — restarting serve process")
+            await self.stop_serve()
+            await self.start_serve()
+        except Exception as e:
+            logger.warning(f"Drain error: {e} — restarting serve process")
+            await self.stop_serve()
+            await self.start_serve()
+
+    @staticmethod
+    def _is_degenerate_output(text: str) -> bool:
+        """Detect degenerate repetitive output that indicates state corruption.
+
+        Common pattern: model outputs '<tool_call>!!!...' or just '!!!...'
+        This signals the infer request state is corrupted and needs restart.
+        """
+        if len(text) < 20:
+            return False
+        # Check if any single character dominates >80% of the text
+        from collections import Counter
+        counts = Counter(text)
+        if counts:
+            most_common_char, most_common_count = counts.most_common(1)[0]
+            if most_common_count > len(text) * 0.8:
+                return True
+        return False
 
     async def _serve_request(
         self,
@@ -236,7 +287,19 @@ class VLBackend:
         reads JSON lines from stdout.
         """
         t0 = time.time()
+
+        # Restart subprocess if previous request produced degenerate output (state corruption)
+        if self._serve_needs_restart:
+            logger.warning("Restarting serve subprocess due to prior degenerate output...")
+            await self.stop_serve()
+            self._serve_needs_restart = False
+
         await self._ensure_serve()
+
+        # Drain any leftover output from a previously cancelled request
+        if self._serve_needs_drain:
+            await self._drain_cancelled_output()
+            self._serve_needs_drain = False
 
         image_path, prompt_path = self._write_temp_files(prompt, image_data)
         t_files = time.time()
@@ -251,7 +314,7 @@ class VLBackend:
                 "raw_prompt": raw_prompt,
             })
 
-            logger.info(f"Serve request: prompt='{prompt[:50]}...', max_tokens={max_tokens}")
+            logger.info(f"Serve request: prompt='{prompt[:50]}...', max_tokens={max_tokens}, temperature={temperature}")
             self._serve_proc.stdin.write((request_json + "\n").encode("utf-8"))
             await self._serve_proc.stdin.drain()
             t_send = time.time()
@@ -301,11 +364,17 @@ class VLBackend:
                         f"first_line={1000*((t_first_line or t_done)-t_send):.0f}ms, "
                         f"total={1000*(t_done-t0):.0f}ms"
                     )
+                    # Detect degenerate output — schedule subprocess restart
+                    if self._is_degenerate_output(accumulated_text):
+                        logger.warning(f"Degenerate output detected ({len(accumulated_text)} chars), "
+                                       "scheduling subprocess restart")
+                        self._serve_needs_restart = True
                     break
 
         except (asyncio.CancelledError, GeneratorExit):
-            # Don't kill the serve process — just stop reading
-            logger.info("Serve request cancelled by client")
+            # Don't kill the serve process — mark for draining on next request
+            self._serve_needs_drain = True
+            logger.info("Serve request cancelled by client — will drain on next request")
             raise
         finally:
             self._cleanup_temp_files(image_path, prompt_path)

@@ -11,11 +11,7 @@ class ServerConfig:
     device: str = "GPU"
     host: str = "0.0.0.0"
     port: int = 8000
-    num_workers: int = 1
     max_tokens_default: int = 4096  # Large default for thinking models (thinking + content)
-    quant_mode: str = "int4_asym"
-    quant_group_size: int = 128
-    quant_backup_mode: str = "int4_asym"
     model_name: str = ""  # Display name for /v1/models
     vl_exe: str = ""  # Path to modeling_qwen3_5.exe for VL
     serve_vl: bool = True  # Use persistent VL subprocess (eliminates model load per request)
@@ -32,29 +28,26 @@ def parse_args() -> ServerConfig:
     parser.add_argument("--device", default="GPU", help="Device (GPU/CPU)")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--workers", type=int, default=1, help="Number of LLMPipeline instances")
     parser.add_argument("--max-tokens", type=int, default=2048, help="Default max tokens")
-    parser.add_argument("--quant", default="int4_asym", help="Quantization mode (int4_asym, int8_sym, none)")
-    parser.add_argument("--quant-group-size", type=int, default=128)
-    parser.add_argument("--quant-backup", default="int4_asym", help="Backup quantization mode")
     parser.add_argument("--model-name", default="", help="Model display name")
     parser.add_argument("--vl-exe", default="", help="Path to modeling_qwen3_5.exe for VL (auto-detected if empty)")
     parser.add_argument("--serve-vl", action="store_true", default=True, help="Use persistent VL subprocess (default: enabled)")
     parser.add_argument("--no-serve-vl", action="store_true", help="Disable persistent VL subprocess, use per-request mode")
     parser.add_argument("--think", action="store_true", default=False, help="Enable thinking mode (default: off)")
+    # Legacy args (ignored, kept for backward compat with existing start.bat)
+    parser.add_argument("--lazy-engine", action="store_true", default=False, help=argparse.SUPPRESS)
+    parser.add_argument("--workers", type=int, default=1, help=argparse.SUPPRESS)
+    parser.add_argument("--quant", default="none", help=argparse.SUPPRESS)
+    parser.add_argument("--quant-group-size", type=int, default=128, help=argparse.SUPPRESS)
+    parser.add_argument("--quant-backup", default="", help=argparse.SUPPRESS)
 
     args = parser.parse_args()
-    quant = "" if args.quant == "none" else args.quant
     return ServerConfig(
         model_path=args.model,
         device=args.device,
         host=args.host,
         port=args.port,
-        num_workers=args.workers,
         max_tokens_default=args.max_tokens,
-        quant_mode=quant,
-        quant_group_size=args.quant_group_size,
-        quant_backup_mode="" if args.quant == "none" else args.quant_backup,
         model_name=args.model_name,
         vl_exe=args.vl_exe,
         serve_vl=not args.no_serve_vl,

@@ -25,9 +25,6 @@ SERVING_DIR = Path(__file__).parent
 # --- Model files -----------------------------------------------------------
 
 MODEL_FILES_TEXT = [
-    # IR (text-only, int4_asym gs128) — renamed to openvino_model.xml/bin
-    ("qwen3_5_text_q4a_b4a_g128.xml", "openvino_model.xml"),
-    ("qwen3_5_text_q4a_b4a_g128.bin", "openvino_model.bin"),
     # Tokenizer
     ("openvino_tokenizer.xml", None),
     ("openvino_tokenizer.bin", None),
@@ -55,7 +52,6 @@ SERVING_FILES = [
     "config.py",
     "schemas.py",
     "tool_parser.py",
-    "engine.py",
     "vl_backend.py",
     "server.py",
     "bench.py",
@@ -159,58 +155,48 @@ DEPLOYED_INIT_PY = textwrap.dedent('''\
 # --- Helpers ----------------------------------------------------------------
 
 def _auto_detect_paths():
-    """Try to auto-detect runtime paths from the current venv / build tree."""
-    import sys
-    try:
-        import openvino_genai
-        genai_pkg = Path(openvino_genai.__file__).parent
-    except ImportError:
-        genai_pkg = None
+    """Detect runtime paths relative to this script's project layout.
 
-    # Dev build tree fallbacks (Windows and Linux)
-    build_candidates = [
-        Path(r"D:\chuansheng\src_code\explicit_modeling\openvino.genai\build\openvino_genai"),
-        Path("/home/gta/chuansheng/src_code/openvino.genai/build/openvino_genai"),
-    ]
-    if genai_pkg is None:
-        for c in build_candidates:
-            if c.is_dir():
-                genai_pkg = c
-                break
+    Layout:  ROOT/openvino-explicit-modeling/serving/deploy.py  (this file)
+             ROOT/openvino.genai/build/openvino_genai/          (genai pkg)
+             ROOT/openvino/bin/intel64/Release/                  (OV DLLs)
+             ROOT/openvino/temp/{platform}/tbb/bin|lib/          (TBB)
+    """
+    root = Path(__file__).resolve().parent.parent.parent  # ROOT
+
+    genai_pkg = root / "openvino.genai" / "build" / "openvino_genai"
+    if not genai_pkg.is_dir():
+        genai_pkg = None
 
     ov_bin = os.environ.get("OV_BIN_DIR")
     if ov_bin:
         ov_bin = Path(ov_bin)
     else:
-        for candidate in [
-            Path(r"D:\chuansheng\src_code\explicit_modeling\openvino\bin\intel64\Release"),
-            Path("/home/gta/chuansheng/src_code/openvino/bin/intel64/Release"),
-        ]:
-            if candidate.is_dir():
-                ov_bin = candidate
-                break
+        ov_bin = root / "openvino" / "bin" / "intel64" / "Release"
+        if not ov_bin.is_dir():
+            ov_bin = None
 
     tbb_bin = None
-    for candidate in [
-        Path(r"D:\chuansheng\src_code\explicit_modeling\openvino\temp\Windows_AMD64\tbb\bin"),
-        Path("/home/gta/chuansheng/src_code/openvino/temp/Linux_x86_64/tbb/lib"),
-    ]:
-        if candidate.is_dir():
-            tbb_bin = candidate
-            break
+    tbb_base = root / "openvino" / "temp"
+    if tbb_base.is_dir():
+        for plat in ["Windows_AMD64", "Linux_x86_64"]:
+            for sub in ["bin", "lib"]:
+                candidate = tbb_base / plat / "tbb" / sub
+                if candidate.is_dir():
+                    tbb_bin = candidate
+                    break
+            if tbb_bin:
+                break
 
     return genai_pkg, ov_bin, tbb_bin
 
 
 def _find_vl_exe() -> Path:
-    """Auto-detect modeling_qwen3_5 binary from build tree (cross-platform)."""
-    import sys
-    candidates = [
-        Path(r"D:\chuansheng\src_code\explicit_modeling\openvino.genai\build\bin\Release\modeling_qwen3_5.exe"),
-        Path(r"D:\chuansheng\src_code\explicit_modeling\openvino.genai\build\bin\modeling_qwen3_5.exe"),
-        Path("/home/gta/chuansheng/src_code/openvino.genai/build/bin/Release/modeling_qwen3_5"),
-    ]
-    for p in candidates:
+    """Detect modeling_qwen3_5 binary from build tree (cross-platform)."""
+    root = Path(__file__).resolve().parent.parent.parent
+    ext = ".exe" if sys.platform == "win32" else ""
+    for sub in ["bin/Release", "bin"]:
+        p = root / "openvino.genai" / "build" / sub / f"modeling_qwen3_5{ext}"
         if p.is_file():
             return p
     return None
@@ -229,8 +215,7 @@ def main():
     parser = argparse.ArgumentParser(description="Deploy Qwen3.5 server — fully self-contained")
     parser.add_argument("--model", required=True, help="Source HF model directory with cached IR")
     parser.add_argument("--output", required=True, help="Output deployment directory")
-    parser.add_argument("--include-vl", action="store_true", default=True, help="Include VL (vision) IR files (default: True)")
-    parser.add_argument("--no-vl", action="store_true", help="Exclude VL (vision) IR files")
+    parser.add_argument("--model-name", help="Model display name (derived from model dir if omitted)")
     parser.add_argument("--genai-pkg", help="openvino_genai site-packages dir (auto-detected)")
     parser.add_argument("--ov-bin", help="OpenVINO DLL directory (auto-detected)")
     parser.add_argument("--tbb-bin", help="TBB DLL directory (auto-detected)")
@@ -250,17 +235,15 @@ def main():
     ov_bin = Path(args.ov_bin) if args.ov_bin else auto_ov
     tbb_bin = Path(args.tbb_bin) if args.tbb_bin else auto_tbb
 
-    include_vl = args.include_vl and not args.no_vl
-
     # Auto-detect VL exe
     vl_exe = Path(args.vl_exe) if args.vl_exe else _find_vl_exe()
 
-    # Validate
-    ir_xml = model_dir / "qwen3_5_text_q4a_b4a_g128.xml"
-    if not ir_xml.exists():
-        print(f"ERROR: IR not found: {ir_xml}")
+    # Validate — require 2-in-1 VL text IR
+    vl_text_ir = model_dir / "qwen3_5_text_vl_q4a_b4a_g128.xml"
+    if not vl_text_ir.exists():
+        print(f"ERROR: VL text IR not found: {vl_text_ir}")
         print("Generate IR first:")
-        print(f"  modeling_qwen3_5 --model {model_dir} --mode text --prompt hi --output-tokens 2 --cache-model")
+        print(f"  modeling_qwen3_5 --model {model_dir} --mode vl --prompt hi --output-tokens 2 --cache-model --image <img>")
         sys.exit(1)
 
     if not genai_pkg or not genai_pkg.is_dir():
@@ -269,39 +252,40 @@ def main():
     if not ov_bin or not ov_bin.is_dir():
         print(f"ERROR: OpenVINO DLL dir not found. Use --ov-bin or set OV_BIN_DIR env var.")
         sys.exit(1)
-    if include_vl and (not vl_exe or not vl_exe.is_file()):
+    if not vl_exe or not vl_exe.is_file():
         print(f"ERROR: VL exe not found. Use --vl-exe or build modeling_qwen3_5 binary first.")
         print(f"  (searched: {vl_exe})")
         sys.exit(1)
-    if include_vl:
-        vl_ir = model_dir / "qwen3_5_vision.xml"
-        if not vl_ir.exists():
-            print(f"ERROR: VL IR not found: {vl_ir}")
-            print("Generate VL IR first:")
-            print(f"  modeling_qwen3_5 --model {model_dir} --mode vl --prompt hi --output-tokens 2 --cache-model --image <img>")
-            sys.exit(1)
+    vl_ir = model_dir / "qwen3_5_vision.xml"
+    if not vl_ir.exists():
+        print(f"ERROR: VL IR not found: {vl_ir}")
+        print("Generate VL IR first:")
+        print(f"  modeling_qwen3_5 --model {model_dir} --mode vl --prompt hi --output-tokens 2 --cache-model --image <img>")
+        sys.exit(1)
+
+    # Derive model display name
+    model_name = args.model_name or model_dir.name
 
     print(f"Source paths:")
     print(f"  Model IR:      {model_dir}")
     print(f"  GenAI package: {genai_pkg}")
     print(f"  OV DLLs:       {ov_bin}")
     print(f"  TBB DLLs:      {tbb_bin or '(not found — may already be in OV dir)'}")
-    if include_vl:
-        print(f"  VL exe:        {vl_exe}")
+    print(f"  VL exe:        {vl_exe}")
     print()
 
     # --- Collect all files ---
     files = []
 
-    # 1) Model files
+    # 1) Model files — tokenizer, config, etc.
     for src_name, dst_name in MODEL_FILES_TEXT:
         dst_name = dst_name or src_name
         _collect_file(model_dir / src_name, model_out / dst_name, files, "model")
 
-    if include_vl:
-        for src_name, dst_name in MODEL_FILES_VL:
-            dst_name = dst_name or src_name
-            _collect_file(model_dir / src_name, model_out / dst_name, files, "VL")
+    # 2) VL IR files (2-in-1 text+vision)
+    for src_name, dst_name in MODEL_FILES_VL:
+        dst_name = dst_name or src_name
+        _collect_file(model_dir / src_name, model_out / dst_name, files, "VL")
 
     # 2) Server code
     for f in SERVING_FILES:
@@ -321,9 +305,8 @@ def main():
             _collect_file(tbb_bin / f, runtime_out / f, files, "TBB")
 
     # 6) VL exe (into runtime dir so it can find libs)
-    if include_vl and vl_exe:
-        exe_dst_name = "modeling_qwen3_5.exe" if IS_WIN else "modeling_qwen3_5"
-        files.append((vl_exe, runtime_out / exe_dst_name))
+    exe_dst_name = "modeling_qwen3_5.exe" if IS_WIN else "modeling_qwen3_5"
+    files.append((vl_exe, runtime_out / exe_dst_name))
 
     # Summary
     n_model = len([1 for _, d in files if str(d).startswith(str(model_out))])
@@ -400,8 +383,8 @@ def main():
     print(f"  {'runtime/openvino_genai/__init__.py':55s}  (generated)")
 
     # --- Scripts (both Windows and Linux) ---
-    vl_exe_win  = r'--vl-exe "%~dp0runtime\openvino_genai\modeling_qwen3_5.exe"' if include_vl else ''
-    vl_exe_lin  = '--vl-exe "$SCRIPT_DIR/runtime/openvino_genai/modeling_qwen3_5"' if include_vl else ''
+    vl_exe_win  = r'--vl-exe "%~dp0runtime\openvino_genai\modeling_qwen3_5.exe"'
+    vl_exe_lin  = '--vl-exe "$SCRIPT_DIR/runtime/openvino_genai/modeling_qwen3_5"'
 
     # Windows scripts
     setup_bat = output_dir / "setup.bat"
@@ -435,7 +418,7 @@ def main():
         cd /d %~dp0
         set "PATH=%~dp0runtime\openvino_genai;%PATH%"
         cd serving
-        "%~dp0venv\Scripts\python.exe" server.py --model "%~dp0model" --device GPU --port 8000 --model-name "Qwen3.5-4B" --quant none {vl_exe_win} %*
+        "%~dp0venv\Scripts\python.exe" server.py --model "%~dp0model" --device GPU --port 8000 --model-name "{model_name}" {vl_exe_win} %*
     """).lstrip(), encoding="utf-8")
 
     # Linux scripts
@@ -471,7 +454,7 @@ def main():
         "$SCRIPT_DIR/venv/bin/python" server.py \\
             --model "$SCRIPT_DIR/model" \\
             --device GPU --port 8000 \\
-            --model-name "Qwen3.5-4B" --quant none \\
+            --model-name "{model_name}" \\
             {vl_exe_lin} "$@"
     """), encoding="utf-8")
     start_sh.chmod(0o755)
