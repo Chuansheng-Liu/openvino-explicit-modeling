@@ -210,19 +210,6 @@ MODELING_QWEN3_5_TEXT_ARGS = [
     PROMPT,
     "--output-tokens",
     "300",
-    "--temperature",
-    "0",
-]
-# Same as above but without --cache-model (avoids pre-existing IR serialization bug).
-MODELING_QWEN3_5_TEXT_NOCACHE_ARGS = [
-    "--mode",
-    "text",
-    "--prompt",
-    PROMPT,
-    "--output-tokens",
-    "300",
-    "--temperature",
-    "0",
 ]
 QWEN3_5_35B_GREEDY_TEXT_ARGS = [
     PROMPT,
@@ -264,7 +251,6 @@ def _make_perf_args(prompt_file_path: Path) -> List[str]:
         "--mode", "text",
         "--prompt-file", str(prompt_file_path),
         "--output-tokens", "1000",
-        "--temperature", "0",  # greedy argmax: deterministic output length for reproducible perf numbers
     ]
 
 MODELING_QWEN3_5_PERF_1K_ARGS = _make_perf_args(PROMPT_PERF_1K_PATH)
@@ -276,20 +262,6 @@ MODELING_QWEN3_5_PERF_32K_ARGS = _make_perf_args(PROMPT_PERF_32K_PATH)
 MODELING_QWEN3_5_PERF_64K_ARGS = _make_perf_args(PROMPT_PERF_64K_PATH)
 MODELING_QWEN3_5_PERF_256K_ARGS = _make_perf_args(PROMPT_PERF_256K_PATH)
 
-# No-cache perf args: same as above but WITHOUT --cache-model (avoids IR serialization bug)
-def _make_perf_nocache_args(prompt_file_path: Path) -> List[str]:
-    return [
-        "--mode", "text",
-        "--prompt-file", str(prompt_file_path),
-        "--output-tokens", "1000",
-        "--temperature", "0",
-    ]
-
-MODELING_QWEN3_5_PERF_NC_1K_ARGS = _make_perf_nocache_args(PROMPT_PERF_1K_PATH)
-MODELING_QWEN3_5_PERF_NC_2K_ARGS = _make_perf_nocache_args(PROMPT_PERF_2K_PATH)
-MODELING_QWEN3_5_PERF_NC_4K_ARGS = _make_perf_nocache_args(PROMPT_PERF_4K_PATH)
-MODELING_QWEN3_5_PERF_NC_8K_ARGS = _make_perf_nocache_args(PROMPT_PERF_8K_PATH)
-
 QUANT_DEFAULT_ARGS = ["int4_asym", "128", "int8_asym"]
 QUANT_INT4_CHANNEL_WISE_ARGS = ["int4_asym", "-1", "int8_asym"]
 QUANT_INT8_CHANNEL_WISE_ARGS = ["int8_asym", "-1", "int8_asym"]
@@ -299,79 +271,6 @@ QWEN3_5_35B_EXTRA_ENV = {
     "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
     "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
     "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
-    "OV_GENAI_TURBOQUANT_KV_CACHE": "1",
-    "OV_GENAI_TURBOQUANT_KV_BITS": "8",
-}
-
-# Same as QWEN3_5_35B_EXTRA_ENV but without TurboQuant — used for baseline perf comparison.
-QWEN3_5_BASELINE_ENV = {
-    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
-    "OV_GENAI_USE_MODELING_API": "1",
-    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
-    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
-    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
-}
-
-# GPU-native TQ: SRHT rotation + standard f16 KV cache + GPU plugin i8 compression.
-# The GPU plugin fuses DynamicQuantize + SDPA → inline i8 dequant with zero overhead.
-QWEN3_5_TQ_GPU_NATIVE_ENV = {
-    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
-    "OV_GENAI_USE_MODELING_API": "1",
-    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
-    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
-    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
-    "OV_GENAI_TURBOQUANT_KV_CACHE": "1",
-    "OV_GENAI_TURBOQUANT_KV_BITS": "8",
-    "OV_GENAI_TQ_GPU_NATIVE": "1",
-}
-
-# GPU compress only: standard baseline KV cache + GPU plugin i8 compression (no TQ rotation).
-QWEN3_5_GPU_COMPRESS_ENV = {
-    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
-    "OV_GENAI_USE_MODELING_API": "1",
-    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
-    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
-    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
-    "OV_GENAI_GPU_KV_COMPRESS": "1",
-}
-
-# TQ INT4 explicit quantization: SRHT rotation + 4-bit KV cache (explicit dequant path).
-# Halves KV cache memory vs INT8. Uses explicit TQ encode/decode in the graph.
-QWEN3_5_TQ_INT4_ENV = {
-    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
-    "OV_GENAI_USE_MODELING_API": "1",
-    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
-    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
-    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
-    "OV_GENAI_TURBOQUANT_KV_CACHE": "1",
-    "OV_GENAI_TURBOQUANT_KV_BITS": "4",
-}
-
-# TQ INT4 GPU-native: SRHT rotation + standard f16 KV + GPU plugin i8 auto-compress.
-# Note: GPU plugin only supports i8, so this is effectively TQ rotation + GPU i8.
-# For true INT4 KV cache, use TQ INT4 explicit path above.
-QWEN3_5_TQ_INT4_GPU_NATIVE_ENV = {
-    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
-    "OV_GENAI_USE_MODELING_API": "1",
-    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
-    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
-    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
-    "OV_GENAI_TURBOQUANT_KV_CACHE": "1",
-    "OV_GENAI_TURBOQUANT_KV_BITS": "4",
-    "OV_GENAI_TQ_GPU_NATIVE": "1",
-}
-
-# TQ INT4 with F16-cache: pack codes for storage, dequant only new tokens each step.
-# Stores both packed i8 codes (memory savings) and f16 dequant cache (speed).
-QWEN3_5_TQ_INT4_F16CACHE_ENV = {
-    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
-    "OV_GENAI_USE_MODELING_API": "1",
-    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
-    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
-    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
-    "OV_GENAI_TURBOQUANT_KV_CACHE": "1",
-    "OV_GENAI_TURBOQUANT_KV_BITS": "4",
-    "OV_GENAI_TQ_F16_CACHE": "1",
 }
 
 TEST_SPECS: List[Dict[str, Any]] = [
@@ -717,70 +616,6 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
     },
-    # --- Qwen3.5 baseline (no TurboQuant) — for perf comparison ---
-    {
-        "name": "Huggingface Qwen3.5-0.8B modeling_qwen3_5 text (baseline)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-0.8B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Huggingface Qwen3.5-2B modeling_qwen3_5 text (baseline)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-2B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Huggingface Qwen3.5-4B modeling_qwen3_5 text (baseline)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Huggingface Qwen3.5-9B modeling_qwen3_5 text (baseline)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-9B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Huggingface Qwen3.5-27B modeling_qwen3_5 text (baseline)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-27B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Huggingface Qwen3.5-35B-A3B-Base modeling_qwen3_5 text (baseline)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B-Base",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Huggingface Qwen3.5-35B-A3B modeling_qwen3_5 text (baseline)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
     {
         "name": "Huggingface Qwen3.5-35B-A3B greedy_causal_lm text",
         "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B",
@@ -912,258 +747,6 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_PERF_256K_ARGS,
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    # ---------------------------------------------------------------------------
-    # 16K TQ vs baseline comparison — Qwen3.5-4B
-    # ---------------------------------------------------------------------------
-    {
-        "name": "Qwen3.5-4B perf 16K text TQ",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_16K_ARGS,
-        "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B perf 16K text baseline",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_16K_ARGS,
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    # ---------------------------------------------------------------------------
-    # GPU-native KV compression tests — Qwen3.5-4B
-    # ---------------------------------------------------------------------------
-    {
-        "name": "Qwen3.5-4B TQ GPU-native (rotation + GPU i8 compress)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
-        "extra_env": QWEN3_5_TQ_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B GPU compress only (no TQ, GPU i8 KV)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
-        "extra_env": QWEN3_5_GPU_COMPRESS_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ GPU-native perf 1K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_1K_ARGS,
-        "extra_env": QWEN3_5_TQ_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B GPU compress only perf 1K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_1K_ARGS,
-        "extra_env": QWEN3_5_GPU_COMPRESS_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B baseline perf 1K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_1K_ARGS,
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ default perf 1K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_1K_ARGS,
-        "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ GPU-native perf 16K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_16K_ARGS,
-        "extra_env": QWEN3_5_TQ_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    # ---------------------------------------------------------------------------
-    # TQ INT4 tests — Qwen3.5-4B  (packed 4-bit KV cache, halves memory vs i8)
-    # ---------------------------------------------------------------------------
-    {
-        "name": "Qwen3.5-4B TQ INT4 explicit (no cache)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
-        "extra_env": QWEN3_5_TQ_INT4_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ INT4 GPU-native (no cache)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
-        "extra_env": QWEN3_5_TQ_INT4_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B baseline (no cache)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ INT8 explicit (no cache)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
-        "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ INT4 f16-cache (no cache)",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
-        "extra_env": QWEN3_5_TQ_INT4_F16CACHE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    # ---------------------------------------------------------------------------
-    # Long-context perf sweep (NO CACHE) — Qwen3.5-4B
-    # baseline, TQ i8 GPU-native, TQ i4 GPU-native × 1K, 2K, 4K, 8K = 12 tests
-    # No --cache-model to avoid IR serialization bug
-    # ---------------------------------------------------------------------------
-    # --- 1K ---
-    {
-        "name": "Qwen3.5-4B baseline NC perf 1K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_1K_ARGS,
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ i8 GPU-native NC perf 1K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_1K_ARGS,
-        "extra_env": QWEN3_5_TQ_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ i4 GPU-native NC perf 1K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_1K_ARGS,
-        "extra_env": QWEN3_5_TQ_INT4_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    # --- 2K ---
-    {
-        "name": "Qwen3.5-4B baseline NC perf 2K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_2K_ARGS,
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ i8 GPU-native NC perf 2K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_2K_ARGS,
-        "extra_env": QWEN3_5_TQ_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ i4 GPU-native NC perf 2K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_2K_ARGS,
-        "extra_env": QWEN3_5_TQ_INT4_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    # --- 4K ---
-    {
-        "name": "Qwen3.5-4B baseline NC perf 4K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_4K_ARGS,
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ i8 GPU-native NC perf 4K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_4K_ARGS,
-        "extra_env": QWEN3_5_TQ_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ i4 GPU-native NC perf 4K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_4K_ARGS,
-        "extra_env": QWEN3_5_TQ_INT4_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    # --- 8K ---
-    {
-        "name": "Qwen3.5-4B baseline NC perf 8K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_8K_ARGS,
-        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ i8 GPU-native NC perf 8K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_8K_ARGS,
-        "extra_env": QWEN3_5_TQ_GPU_NATIVE_ENV.copy(),
-        "use_named_model_arg": True,
-    },
-    {
-        "name": "Qwen3.5-4B TQ i4 GPU-native NC perf 8K",
-        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
-        "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": TEXT_WORK_DIR_REL,
-        "command_args": MODELING_QWEN3_5_PERF_NC_8K_ARGS,
-        "extra_env": QWEN3_5_TQ_INT4_GPU_NATIVE_ENV.copy(),
         "use_named_model_arg": True,
     },
 ]
@@ -1372,7 +955,6 @@ def extract_performance(output: str) -> str:
         "TTFT:",
         "TPOT:",
         "Throughput:",
-        "KV cache size:",
     ]
     perf_lines: List[str] = []
     for line in output.splitlines():
@@ -1951,7 +1533,6 @@ def main() -> int:
         test_duration = _dt.datetime.now() - test_start
         ttft_value = extract_label_value(perf_block, "TTFT")
         throughput_value = extract_label_value(perf_block, "Throughput")
-        kv_cache_value = extract_label_value(perf_block, "KV cache size")
         timing_entries.append(
             {
                 "index": test["index"],
@@ -1959,7 +1540,6 @@ def main() -> int:
                 "duration": test_duration,
                 "ttft": ttft_value,
                 "throughput": throughput_value,
-                "kv_cache": kv_cache_value,
             }
         )
 
@@ -2081,13 +1661,13 @@ def main() -> int:
     if timing_entries:
         summary_lines.extend(
             [
-                "| Test | TTFT | Throughput | KV Cache | Duration |",
-                "| --- | --- | --- | --- | --- |",
+                "| Test | TTFT | Throughput | Duration |",
+                "| --- | --- | --- | --- |",
             ]
         )
         for entry in timing_entries:
             summary_lines.append(
-                f"| {entry['index']}: {entry['name']} | {entry['ttft']} | {entry['throughput']} | {entry['kv_cache']} | {format_duration(entry['duration'])} |"
+                f"| {entry['index']}: {entry['name']} | {entry['ttft']} | {entry['throughput']} | {format_duration(entry['duration'])} |"
             )
     else:
         summary_lines.append("No tests were executed.")
@@ -2100,11 +1680,11 @@ def main() -> int:
     print("=" * 80)
     print("Timing summary:")
     if timing_entries:
-        print("| Test | TTFT | Throughput | KV Cache | Duration |")
-        print("| --- | --- | --- | --- | --- |")
+        print("| Test | TTFT | Throughput | Duration |")
+        print("| --- | --- | --- | --- |")
         for entry in timing_entries:
             print(
-                f"| {entry['index']}: {entry['name']} | {entry['ttft']} | {entry['throughput']} | {entry['kv_cache']} | {format_duration(entry['duration'])} |"
+                f"| {entry['index']}: {entry['name']} | {entry['ttft']} | {entry['throughput']} | {format_duration(entry['duration'])} |"
             )
     else:
         print("No tests were executed.")
