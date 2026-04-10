@@ -35,7 +35,7 @@ param(
     [string]$Device = "GPU",
     [int]$Workers = 1,
     [float]$RepPenalty = 1.1,
-    [float]$PresPenalty = 1.5,
+    [float]$PresPenalty = 0.0,
     [float]$MinTemp = 0.0,
     [int]$MaxTokens = 2048
 )
