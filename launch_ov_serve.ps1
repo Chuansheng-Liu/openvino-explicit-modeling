@@ -36,6 +36,7 @@ param(
     [int]$Workers = 1,
     [float]$RepPenalty = 1.1,
     [float]$PresPenalty = 0.0,
+    [float]$FreqPenalty = 0.0,
     [float]$MinTemp = 0.0,
     [int]$MaxTokens = 2048,
     [switch]$NoLog
@@ -95,6 +96,7 @@ $args_list = @(
     "--workers", $Workers,
     "--rep-penalty", $RepPenalty,
     "--pres-penalty", $PresPenalty,
+    "--freq-penalty", $FreqPenalty,
     "--max-tokens", $MaxTokens,
     "--warmup-tokens", $WarmupTokens
 )
@@ -118,6 +120,7 @@ Write-Host "  Vision (VL):    $(-not $NoVL.IsPresent)"
 Write-Host "  Thinking:       $($Thinking.IsPresent)"
 Write-Host "  Rep.Penalty:    $RepPenalty"
 Write-Host "  Pres.Penalty:   $PresPenalty"
+Write-Host "  Freq.Penalty:   $FreqPenalty"
 Write-Host "  Max Tokens:     $MaxTokens"
 Write-Host "  Warmup Tokens:  $WarmupTokens"
 Write-Host "  Logging:        $(-not $NoLog.IsPresent)"
