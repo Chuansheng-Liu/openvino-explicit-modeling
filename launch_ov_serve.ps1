@@ -121,6 +121,23 @@ Write-Host "  Warmup Tokens:  $WarmupTokens"
 Write-Host "  Quant:          int4_asym / group_size=128"
 Write-Host ""
 Write-Host "  Endpoint:       http://localhost:${Port}/v1/chat/completions"
+Write-Host ""
+
+# ── DLL verification ──
+$keyDlls = @("openvino.dll", "openvino_genai.dll", "openvino_intel_gpu_plugin.dll", "tbb12.dll")
+Write-Host "  DLL resolution:" -ForegroundColor Yellow
+foreach ($dll in $keyDlls) {
+    $resolved = (where.exe $dll 2>$null) | Select-Object -First 1
+    if ($resolved) {
+        $color = if ($LaunchMode -eq "standalone" -and $resolved.StartsWith($SCRIPT_DIR)) { "Green" }
+                 elseif ($LaunchMode -eq "build-tree") { "Green" }
+                 else { "Red" }
+        Write-Host "    $dll -> $resolved" -ForegroundColor $color
+    } else {
+        Write-Host "    $dll -> NOT FOUND" -ForegroundColor Red
+    }
+}
+Write-Host ""
 Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
 
