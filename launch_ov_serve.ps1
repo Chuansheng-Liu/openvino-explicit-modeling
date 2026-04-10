@@ -144,4 +144,18 @@ Write-Host ""
 Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
 
-& $EXE @args_list
+# ── Log file: stderr goes to file + terminal ──
+$LogFile = Join-Path $SCRIPT_DIR "ov_serve.log"
+Write-Host "  Log file:       $LogFile" -ForegroundColor Yellow
+Write-Host ""
+
+& $EXE @args_list 2>&1 | ForEach-Object {
+    $line = $_
+    if ($line -is [System.Management.Automation.ErrorRecord]) {
+        $text = $line.Exception.Message
+        Add-Content -Path $LogFile -Value $text
+        Write-Host $text
+    } else {
+        Write-Host $line
+    }
+}
