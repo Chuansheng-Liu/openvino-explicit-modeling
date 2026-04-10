@@ -37,7 +37,8 @@ param(
     [float]$RepPenalty = 1.1,
     [float]$PresPenalty = 0.0,
     [float]$MinTemp = 0.0,
-    [int]$MaxTokens = 2048
+    [int]$MaxTokens = 2048,
+    [switch]$NoLog
 )
 
 $ErrorActionPreference = "Stop"
@@ -101,6 +102,7 @@ $args_list = @(
 if (-not $NoVL) { $args_list += "--vl" }
 if (-not $Thinking) { $args_list += "--no-thinking" }
 if ($MinTemp -gt 0) { $args_list += @("--min-temp", $MinTemp) }
+if ($NoLog) { $args_list += "--no-log" }
 
 # ── Launch ──
 Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
@@ -118,6 +120,7 @@ Write-Host "  Rep.Penalty:    $RepPenalty"
 Write-Host "  Pres.Penalty:   $PresPenalty"
 Write-Host "  Max Tokens:     $MaxTokens"
 Write-Host "  Warmup Tokens:  $WarmupTokens"
+Write-Host "  Logging:        $(-not $NoLog.IsPresent)"
 Write-Host "  Quant:          int4_asym / group_size=128"
 Write-Host ""
 Write-Host "  Endpoint:       http://localhost:${Port}/v1/chat/completions"
