@@ -7,8 +7,8 @@
     Automatically detects standalone package layout vs. build tree.
 .PARAMETER Model
     Path to HF model directory (default: Qwen3.5-4B)
-.PARAMETER VL
-    Enable vision-language mode (loads vision encoder)
+.PARAMETER NoVL
+    Disable vision-language mode (VL is on by default)
 .PARAMETER Port
     HTTP port (default: 8080)
 .PARAMETER WarmupTokens
@@ -16,10 +16,10 @@
 .PARAMETER Thinking
     Enable thinking mode (default: off)
 .EXAMPLE
-    # Text-only 4B
+    # VL 4B (default)
     .\launch_ov_serve.ps1
-    # VL 4B
-    .\launch_ov_serve.ps1 -VL
+    # Text-only 4B
+    .\launch_ov_serve.ps1 -NoVL
     # 35B text
     .\launch_ov_serve.ps1 -Model C:\data\models\Huggingface\Qwen3.5-35B-A3B
     # From standalone package
@@ -28,7 +28,7 @@
 #>
 param(
     [string]$Model = "C:\data\models\Huggingface\Qwen3.5-4B",
-    [switch]$VL,
+    [switch]$NoVL,
     [int]$Port = 8080,
     [int]$WarmupTokens = 4096,
     [switch]$Thinking,
@@ -98,7 +98,7 @@ $args_list = @(
     "--warmup-tokens", $WarmupTokens
 )
 
-if ($VL) { $args_list += "--vl" }
+if (-not $NoVL) { $args_list += "--vl" }
 if (-not $Thinking) { $args_list += "--no-thinking" }
 if ($MinTemp -gt 0) { $args_list += @("--min-temp", $MinTemp) }
 
@@ -112,7 +112,7 @@ Write-Host "  Model:          $Model"
 Write-Host "  Device:         $Device"
 Write-Host "  Port:           $Port"
 Write-Host "  Workers:        $Workers"
-Write-Host "  Vision (VL):    $($VL.IsPresent)"
+Write-Host "  Vision (VL):    $(-not $NoVL.IsPresent)"
 Write-Host "  Thinking:       $($Thinking.IsPresent)"
 Write-Host "  Rep.Penalty:    $RepPenalty"
 Write-Host "  Pres.Penalty:   $PresPenalty"
