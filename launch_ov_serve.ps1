@@ -4,6 +4,7 @@
 .DESCRIPTION
     Sets up environment variables and starts the HTTP server with best-practice
     defaults for INT4 quantized Qwen3.5 models.
+    Automatically detects standalone package layout vs. build tree.
 .PARAMETER Model
     Path to HF model directory (default: Qwen3.5-4B)
 .PARAMETER VL
@@ -21,6 +22,9 @@
     .\launch_ov_serve.ps1 -VL
     # 35B text
     .\launch_ov_serve.ps1 -Model C:\data\models\Huggingface\Qwen3.5-35B-A3B
+    # From standalone package
+    cd package_serve\Release
+    .\launch_ov_serve.ps1 -Model C:\data\models\Huggingface\Qwen3.5-4B -VL
 #>
 param(
     [string]$Model = "C:\data\models\Huggingface\Qwen3.5-4B",
@@ -38,30 +42,44 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ── Paths ──
-$REPO_ROOT = "D:\chuansheng\src_code\explicit_modeling"
-$OV_ROOT   = "$REPO_ROOT\openvino"
-$GENAI_ROOT = "$REPO_ROOT\openvino.genai"
-$EXE = "$GENAI_ROOT\build\bin\Release\ov_serve.exe"
+# ── Detect standalone package vs build tree ──
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
-if (-not (Test-Path $EXE)) {
-    Write-Error "ov_serve.exe not found at $EXE. Run build.bat first."
-    exit 1
+# Standalone mode: ov_serve.exe is in the same directory as this script
+$STANDALONE_EXE = Join-Path $SCRIPT_DIR "ov_serve.exe"
+
+if (Test-Path $STANDALONE_EXE) {
+    # ── Standalone package mode ──
+    $EXE = $STANDALONE_EXE
+    $env:PATH = "$SCRIPT_DIR;$env:PATH"
+    $LaunchMode = "standalone"
+} else {
+    # ── Build tree mode ──
+    $REPO_ROOT = "D:\chuansheng\src_code\explicit_modeling"
+    $OV_ROOT   = "$REPO_ROOT\openvino"
+    $GENAI_ROOT = "$REPO_ROOT\openvino.genai"
+    $EXE = "$GENAI_ROOT\build\bin\Release\ov_serve.exe"
+
+    if (-not (Test-Path $EXE)) {
+        Write-Error "ov_serve.exe not found at $EXE. Run build.bat first."
+        exit 1
+    }
+
+    $env:PATH = @(
+        "$OV_ROOT\bin\intel64\Release",
+        "$OV_ROOT\temp\Windows_AMD64\tbb\bin",
+        "$OV_ROOT\build\bin\Release",
+        "$GENAI_ROOT\build\openvino_genai",
+        "$GENAI_ROOT\build\bin\Release",
+        $env:PATH
+    ) -join ";"
+    $LaunchMode = "build-tree"
 }
+
 if (-not (Test-Path $Model)) {
     Write-Error "Model directory not found: $Model"
     exit 1
 }
-
-# ── Environment ──
-$env:PATH = @(
-    "$OV_ROOT\bin\intel64\Release",
-    "$OV_ROOT\temp\Windows_AMD64\tbb\bin",
-    "$OV_ROOT\build\bin\Release",
-    "$GENAI_ROOT\build\openvino_genai",
-    "$GENAI_ROOT\build\bin\Release",
-    $env:PATH
-) -join ";"
 
 # Modeling API + INT4 asymmetric quantization with group_size=128
 $env:OV_GENAI_USE_MODELING_API = "1"
@@ -89,6 +107,7 @@ Write-Host "══════════════════════�
 Write-Host "  ov_serve — Qwen3.5 OpenVINO Inference Server"     -ForegroundColor Cyan
 Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
+Write-Host "  Launch mode:    $LaunchMode"
 Write-Host "  Model:          $Model"
 Write-Host "  Device:         $Device"
 Write-Host "  Port:           $Port"
