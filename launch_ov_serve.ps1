@@ -13,8 +13,8 @@
     HTTP port (default: 8080)
 .PARAMETER WarmupTokens
     GPU warmup sequence length (default: 4096, 0=disable)
-.PARAMETER NoThinking
-    Disable thinking mode
+.PARAMETER Thinking
+    Enable thinking mode (default: off)
 .EXAMPLE
     # Text-only 4B
     .\launch_ov_serve.ps1
@@ -31,7 +31,7 @@ param(
     [switch]$VL,
     [int]$Port = 8080,
     [int]$WarmupTokens = 4096,
-    [switch]$NoThinking,
+    [switch]$Thinking,
     [string]$Device = "GPU",
     [int]$Workers = 1,
     [float]$RepPenalty = 1.1,
@@ -99,7 +99,7 @@ $args_list = @(
 )
 
 if ($VL) { $args_list += "--vl" }
-if ($NoThinking) { $args_list += "--no-thinking" }
+if (-not $Thinking) { $args_list += "--no-thinking" }
 if ($MinTemp -gt 0) { $args_list += @("--min-temp", $MinTemp) }
 
 # ── Launch ──
@@ -113,7 +113,7 @@ Write-Host "  Device:         $Device"
 Write-Host "  Port:           $Port"
 Write-Host "  Workers:        $Workers"
 Write-Host "  Vision (VL):    $($VL.IsPresent)"
-Write-Host "  Thinking:       $(-not $NoThinking.IsPresent)"
+Write-Host "  Thinking:       $($Thinking.IsPresent)"
 Write-Host "  Rep.Penalty:    $RepPenalty"
 Write-Host "  Pres.Penalty:   $PresPenalty"
 Write-Host "  Max Tokens:     $MaxTokens"
