@@ -83,10 +83,10 @@ if (-not (Test-Path $Model)) {
     exit 1
 }
 
-# Modeling API + INT4 asymmetric quantization with group_size=128
+# Modeling API + INT4 asymmetric quantization with group_size=32
 $env:OV_GENAI_USE_MODELING_API = "1"
 $env:OV_GENAI_INFLIGHT_QUANT_MODE = "int4_asym"
-$env:OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE = "128"
+$env:OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE = "32"
 
 # ── Build command line ──
 $args_list = @(
@@ -124,7 +124,7 @@ Write-Host "  Freq.Penalty:   $FreqPenalty"
 Write-Host "  Max Tokens:     $MaxTokens"
 Write-Host "  Warmup Tokens:  $WarmupTokens"
 Write-Host "  Logging:        $(-not $NoLog.IsPresent)"
-Write-Host "  Quant:          int4_asym / group_size=128"
+Write-Host "  Quant:          int4_asym / group_size=32"
 Write-Host ""
 Write-Host "  Endpoint:       http://localhost:${Port}/v1/chat/completions"
 Write-Host ""
