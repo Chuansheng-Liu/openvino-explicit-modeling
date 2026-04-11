@@ -46,7 +46,7 @@ def _print_banner(config: dict[str, object], runtime_dirs: list[Path], log_file:
     print(f"  Max Tokens:     {config['max_tokens']}")
     print(f"  Warmup Tokens:  {config['warmup_tokens']}")
     print(f"  Logging:        {config['logging']}")
-    print("  Quant:          int4_asym / group_size=32")
+    print("  Quant:          int4_asym / group_size=128")
     print()
     print(f"  {PATH_VAR}:")
     for path in runtime_dirs:
@@ -211,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     env = os.environ.copy()
     env["OV_GENAI_USE_MODELING_API"] = "1"
     env["OV_GENAI_INFLIGHT_QUANT_MODE"] = "int4_asym"
-    env["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = "32"
+    env["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = "128"
     resolved_runtime_dirs = _prepend_env_paths(env, PATH_VAR, runtime_dirs)
     _configure_tokenizer_python(env, script_dir, workspace_root)
 
