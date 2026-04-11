@@ -221,19 +221,30 @@ def copy_file(src: Path, dst_dir: Path, relative_dst: Path) -> tuple[str, int]:
     return "copied", sz
 
 
-def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: bool) -> tuple[list[tuple[Path, Path]], list[str]]:
+def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: bool,
+                        group_size: int | None = None) -> tuple[list[tuple[Path, Path]], list[str]]:
     if not model_dir.exists():
         return [], [f"Model directory not found: {model_dir}"]
     if not model_dir.is_dir():
         return [], [f"Model path is not a directory: {model_dir}"]
 
+    # Build group-size tag for filtering IR files (e.g. "_g128.")
+    gs_tag = f"_g{group_size}." if group_size is not None else None
+
     matched: list[tuple[Path, Path]] = []
     for file_path in sorted(model_dir.iterdir()):
         if not file_path.is_file():
             continue
-        if (
-            file_path.suffix.lower() in {".xml", ".bin"}
-            or file_path.name in MODEL_METADATA_FILES
+        # Filter IR files by group size when specified
+        if file_path.suffix.lower() in {".xml", ".bin"}:
+            stem = file_path.stem + file_path.suffix  # full filename
+            if gs_tag is not None and file_path.name.startswith("qwen3_5_text"):
+                if gs_tag not in stem:
+                    log("SKIP", f"{file_path.name} (group_size != {group_size})")
+                    continue
+            matched.append((file_path, Path("models") / model_subdir / file_path.name))
+        elif (
+            file_path.name in MODEL_METADATA_FILES
             or (include_hf_weights and file_path.suffix.lower() == ".safetensors")
             or (include_hf_weights and file_path.name.endswith(".safetensors.index.json"))
         ):
@@ -300,6 +311,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Destination subdirectory name under models/ (default: source directory name).")
     p.add_argument("--include-hf-weights", action="store_true",
                    help="Also bundle HuggingFace .safetensors weights. Default is IR-only packaging.")
+    p.add_argument("--group-size", type=int, default=128, metavar="N",
+                   help="Only package text IR files matching this group size (default: 128).\n"
+                        "Set to 0 to include all group sizes.")
     p.add_argument("--include-tokenizer-python", action="store_true",
                    help="Bundle Python openvino/openvino_tokenizers fallback packages for runtime tokenizer conversion.")
     return p
@@ -335,9 +349,11 @@ def main(argv: list[str] | None = None) -> int:
 
     model_dir = Path(args.model_dir).resolve() if args.model_dir else None
     model_subdir = args.model_subdir or (model_dir.name if model_dir else None)
+    group_size = args.group_size if args.group_size != 0 else None
     if model_dir is not None:
         log("INFO", f"Model src : {model_dir}")
         log("INFO", f"Model dst : {pkg_dir / 'models' / model_subdir}")
+        log("INFO", f"Group size: {group_size if group_size else 'all'}")
 
     stats = dict(matched=0, copied=0, overwritten=0, skipped=0, errors=0,
                  matched_bytes=0, written_bytes=0, cleaned=0, cleaned_bytes=0)
@@ -393,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
                 stats["skipped"] += 1
 
     if model_dir is not None and model_subdir is not None:
-        files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights)
+        files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights, group_size)
         if issues:
             for iss in issues:
                 log("ERROR", iss)
