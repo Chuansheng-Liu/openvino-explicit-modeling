@@ -434,6 +434,12 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     stats["skipped"] += 1
 
+    # Copy readme.txt to package root
+    readme_src = Path(__file__).resolve().parent.parent / "serving" / "readme.txt"
+    if readme_src.is_file():
+        shutil.copy2(readme_src, pkg_dir / "readme.txt")
+        log("INFO", "Copied readme.txt to package root")
+
     # Summary
     final_files = [f for f in pkg_dir.rglob("*") if f.is_file()]
     final_bytes = sum(f.stat().st_size for f in final_files)
