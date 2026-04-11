@@ -193,7 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Enable stderr logging to ov_serve.log.")
     log_group.add_argument("--no-log", action="store_false", dest="log",
                            help="Disable stderr logging (default).")
-    parser.set_defaults(log=True)
+    parser.set_defaults(log=False)
     return parser
 
 
