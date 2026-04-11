@@ -176,24 +176,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", type=Path, default=None, help="Path to HF model directory.")
     parser.add_argument("--no-vl", action="store_true", help="Disable vision-language mode.")
     parser.add_argument("--port", type=int, default=8080, help="HTTP port.")
-    parser.add_argument("--warmup-tokens", type=int, default=4096, help="Warmup sequence length (0 disables warmup).")
+    parser.add_argument("--warmup-tokens", type=int, default=512, help="Warmup sequence length (0 disables warmup).")
     parser.add_argument("--thinking", action="store_true", help="Enable thinking mode.")
     parser.add_argument("--device", default="GPU", help="Target device.")
     parser.add_argument("--workers", type=int, default=1, help="Worker count.")
-    parser.add_argument("--temperature", type=float, default=0.7, help="Default temperature when requests omit it.")
-    parser.add_argument("--top-p", type=float, default=0.8, help="Default top-p when requests omit it.")
+    parser.add_argument("--temperature", type=float, default=0.1, help="Default temperature when requests omit it.")
+    parser.add_argument("--top-p", type=float, default=1.0, help="Default top-p when requests omit it.")
     parser.add_argument("--top-k", type=int, default=20, help="Default top-k when requests omit it.")
-    parser.add_argument("--rep-penalty", type=float, default=1.5, help="Repetition penalty.")
+    parser.add_argument("--rep-penalty", type=float, default=1.0, help="Repetition penalty (1.0 = off).")
     parser.add_argument("--pres-penalty", type=float, default=0.0, help="Presence penalty.")
     parser.add_argument("--freq-penalty", type=float, default=0.0, help="Frequency penalty.")
     parser.add_argument("--min-temp", type=float, default=0.0, help="Minimum sampling temperature.")
-    parser.add_argument("--max-tokens", type=int, default=2048, help="Maximum generated tokens.")
+    parser.add_argument("--max-tokens", type=int, default=512, help="Maximum generated tokens.")
     log_group = parser.add_mutually_exclusive_group()
     log_group.add_argument("--log", action="store_true", dest="log",
                            help="Enable stderr logging to ov_serve.log.")
     log_group.add_argument("--no-log", action="store_false", dest="log",
                            help="Disable stderr logging (default).")
-    parser.set_defaults(log=False)
+    parser.set_defaults(log=True)
     return parser
 
 
