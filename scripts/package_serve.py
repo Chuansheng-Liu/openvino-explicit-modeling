@@ -1,13 +1,14 @@
-"""Package ov_serve, convert_ir, and modeling_qwen3_5_cli into a standalone directory.
+"""Package ov_serve and optional model files into a standalone directory.
 
-Collects only the executables and DLLs needed for serving, so the
-resulting folder can be copied to any machine and run without a full
-build tree.
+Collects the serving executables, runtime libraries, Python helpers, and
+optionally a preconverted model under models/<name> so the resulting
+folder can be copied to another machine and run without a full build tree.
 
 Usage:
     python scripts\\package_serve.py
     python scripts\\package_serve.py --clean
     python scripts\\package_serve.py --output D:\\deploy\\ov_serve_bundle
+    python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B --model-subdir 9B
 """
 
 from __future__ import annotations
@@ -15,17 +16,40 @@ from __future__ import annotations
 import argparse
 import filecmp
 import shutil
-from dataclasses import dataclass, field
+import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Executables to include
 # ---------------------------------------------------------------------------
-SERVE_EXECUTABLES = {
-    "ov_serve.exe",
-    "convert_ir.exe",
-    "modeling_qwen3_5_cli.exe",
-}
+IS_WINDOWS = sys.platform == "win32"
+
+SERVE_EXECUTABLES = frozenset({
+    "ov_serve.exe" if IS_WINDOWS else "ov_serve",
+    "convert_ir.exe" if IS_WINDOWS else "convert_ir",
+    "modeling_qwen3_5_cli.exe" if IS_WINDOWS else "modeling_qwen3_5_cli",
+})
+
+RUNTIME_SUFFIXES = (".dll",) if IS_WINDOWS else (".so",)
+TBB_SUFFIXES = (".dll",) if IS_WINDOWS else (".12", ".2")
+PACKAGE_SCRIPT_SUFFIXES = (".ps1",) if IS_WINDOWS else (".py",)
+PACKAGE_CLEAN_SUFFIXES = {".dll", ".exe", ".ps1", ".py", ".so", ".12", ".2"}
+TBB_RELATIVE = "openvino/temp/Windows_AMD64/tbb/bin" if IS_WINDOWS else "openvino/temp/Linux_x86_64/tbb/lib"
+TBB_NAMES = frozenset({"tbb12.dll"} if IS_WINDOWS else {"libtbb.so.12", "libtbbmalloc.so.2"})
+LAUNCH_SCRIPT_RELATIVE = "openvino-explicit-modeling/launch_ov_serve.ps1" if IS_WINDOWS else "openvino-explicit-modeling/launch_ov_serve.py"
+MODEL_METADATA_FILES = frozenset({
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "merges.txt",
+    "preprocessor_config.json",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "video_preprocessor_config.json",
+    "vocab.json",
+})
 
 # ---------------------------------------------------------------------------
 # Source specifications
@@ -36,60 +60,82 @@ class FileSource:
     """Describes a set of files to collect from the build tree."""
     name: str
     relative_path_template: str
-    source_kind: str          # "directory" or "file"
+    source_kind: str          # "directory", "file", or "tree"
     suffixes: tuple[str, ...] = (".dll",)
     name_filter: frozenset[str] | None = None  # None = take all matching suffix
+    destination_subdir: str | None = None
 
     def resolve(self, workspace_root: Path, config: str) -> Path:
         return workspace_root / Path(self.relative_path_template.format(config=config))
 
 
 # Order matters only for logging; all files end up in one flat directory.
-SOURCES = (
+BASE_SOURCES = (
     # --- Executables (cherry-picked) ---
     FileSource(
         name="Serve executables",
         relative_path_template="openvino.genai/build/bin/{config}",
         source_kind="directory",
-        suffixes=(".exe",),
-        name_filter=frozenset(SERVE_EXECUTABLES),
+        suffixes=(".exe",) if IS_WINDOWS else ("",),
+        name_filter=SERVE_EXECUTABLES,
     ),
     # --- OpenVINO runtime DLLs ---
     FileSource(
-        name="OpenVINO runtime DLLs",
+        name="OpenVINO runtime libraries",
         relative_path_template="openvino/bin/intel64/{config}",
         source_kind="directory",
-        suffixes=(".dll",),
+        suffixes=RUNTIME_SUFFIXES,
     ),
     # --- TBB ---
     FileSource(
-        name="TBB runtime DLL",
-        relative_path_template="openvino/temp/Windows_AMD64/tbb/bin/tbb12.dll",
-        source_kind="file",
-        suffixes=(".dll",),
+        name="TBB runtime libraries",
+        relative_path_template=TBB_RELATIVE,
+        source_kind="directory",
+        suffixes=TBB_SUFFIXES,
+        name_filter=TBB_NAMES,
     ),
-    # --- OpenVINO GenAI DLLs ---
+    # --- OpenVINO GenAI runtime ---
     FileSource(
-        name="OpenVINO GenAI DLLs",
+        name="OpenVINO GenAI runtime",
         relative_path_template="openvino.genai/build/openvino_genai",
         source_kind="directory",
-        suffixes=(".dll",),
+        suffixes=RUNTIME_SUFFIXES,
     ),
-    # --- OpenCV + tokenizers DLLs from build/bin ---
+    # --- Tokenizers runtime from build/bin ---
     FileSource(
-        name="OpenCV / tokenizers DLLs",
+        name="Tokenizers runtime",
         relative_path_template="openvino.genai/build/bin",
         source_kind="directory",
-        suffixes=(".dll",),
+        suffixes=RUNTIME_SUFFIXES,
+        name_filter=frozenset({"libopenvino_tokenizers.so"}) if not IS_WINDOWS else None,
     ),
     # --- Launch script ---
     FileSource(
         name="Launch script",
-        relative_path_template="openvino-explicit-modeling/launch_ov_serve.ps1",
+        relative_path_template=LAUNCH_SCRIPT_RELATIVE,
         source_kind="file",
-        suffixes=(".ps1",),
+        suffixes=PACKAGE_SCRIPT_SUFFIXES,
     ),
 )
+
+TOKENIZER_FALLBACK_SOURCES = (
+    FileSource(
+        name="OpenVINO tokenizers Python package",
+        relative_path_template="openvino.genai/thirdparty/openvino_tokenizers/python/openvino_tokenizers",
+        source_kind="tree",
+        suffixes=(".py",),
+        destination_subdir="openvino_tokenizers",
+    ),
+    FileSource(
+        name="OpenVINO Python package",
+        relative_path_template="openvino/build_python3.12/site-packages/python/openvino",
+        source_kind="tree",
+        suffixes=(".py", ".pyi", ".so"),
+        destination_subdir="openvino",
+    ),
+)
+
+ALL_SOURCES = BASE_SOURCES + TOKENIZER_FALLBACK_SOURCES
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +155,17 @@ def fmt(size: int) -> str:
     return f"{size} B"
 
 
-def collect(src: FileSource, ws: Path, cfg: str) -> tuple[list[Path], list[str]]:
+def _dest_path(src: FileSource, file_path: Path, root_path: Path | None = None) -> Path:
+    if src.destination_subdir:
+        if root_path is not None:
+            return Path(src.destination_subdir) / file_path.relative_to(root_path)
+        return Path(src.destination_subdir) / file_path.name
+    if root_path is not None:
+        return file_path.relative_to(root_path)
+    return Path(file_path.name)
+
+
+def collect(src: FileSource, ws: Path, cfg: str) -> tuple[list[tuple[Path, Path]], list[str]]:
     path = src.resolve(ws, cfg)
     ok_sfx = {s.lower() for s in src.suffixes}
 
@@ -118,7 +174,20 @@ def collect(src: FileSource, ws: Path, cfg: str) -> tuple[list[Path], list[str]]
             return [], [f"{src.name}: not found: {path}"]
         if not path.is_file():
             return [], [f"{src.name}: not a file: {path}"]
-        return [path], []
+        return [(path, _dest_path(src, path))], []
+
+    if src.source_kind == "tree":
+        if not path.is_dir():
+            return [], [f"{src.name}: directory not found: {path}"]
+        files = sorted(
+            f for f in path.rglob("*")
+            if f.is_file()
+            and f.suffix.lower() in ok_sfx
+            and (src.name_filter is None or f.name in src.name_filter)
+        )
+        if not files:
+            return [], [f"{src.name}: no matching files in {path}"]
+        return [(f, _dest_path(src, f, path)) for f in files], []
 
     if not path.is_dir():
         return [], [f"{src.name}: directory not found: {path}"]
@@ -131,24 +200,75 @@ def collect(src: FileSource, ws: Path, cfg: str) -> tuple[list[Path], list[str]]
     )
     if not files:
         return [], [f"{src.name}: no matching files in {path}"]
-    return files, []
+    return [(f, _dest_path(src, f)) for f in files], []
 
 
-def copy_file(src: Path, dst_dir: Path) -> tuple[str, int]:
-    dst = dst_dir / src.name
+def copy_file(src: Path, dst_dir: Path, relative_dst: Path) -> tuple[str, int]:
+    dst = dst_dir / relative_dst
+    dst.parent.mkdir(parents=True, exist_ok=True)
     sz = src.stat().st_size
 
     if dst.exists() and dst.is_file():
         if filecmp.cmp(src, dst, shallow=False):
-            log("SKIP", f"{src.name} (identical, {fmt(sz)})")
+            log("SKIP", f"{relative_dst} (identical, {fmt(sz)})")
             return "skipped", 0
-        log("COPY", f"{src.name} -> overwrite ({fmt(sz)})")
+        log("COPY", f"{relative_dst} -> overwrite ({fmt(sz)})")
         shutil.copy2(src, dst)
         return "overwritten", sz
 
-    log("COPY", f"{src.name} ({fmt(sz)})")
+    log("COPY", f"{relative_dst} ({fmt(sz)})")
     shutil.copy2(src, dst)
     return "copied", sz
+
+
+def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: bool) -> tuple[list[tuple[Path, Path]], list[str]]:
+    if not model_dir.exists():
+        return [], [f"Model directory not found: {model_dir}"]
+    if not model_dir.is_dir():
+        return [], [f"Model path is not a directory: {model_dir}"]
+
+    matched: list[tuple[Path, Path]] = []
+    for file_path in sorted(model_dir.iterdir()):
+        if not file_path.is_file():
+            continue
+        if (
+            file_path.suffix.lower() in {".xml", ".bin"}
+            or file_path.name in MODEL_METADATA_FILES
+            or (include_hf_weights and file_path.suffix.lower() == ".safetensors")
+            or (include_hf_weights and file_path.name.endswith(".safetensors.index.json"))
+        ):
+            matched.append((file_path, Path("models") / model_subdir / file_path.name))
+
+    if not matched:
+        return [], [f"No model files selected from {model_dir}"]
+
+    names = {path.name for path, _ in matched}
+    has_vl_text_xml = any(name.startswith("qwen3_5_text_vl") and name.endswith(".xml") for name in names)
+    has_vl_text_bin = any(name.startswith("qwen3_5_text_vl") and name.endswith(".bin") for name in names)
+    if has_vl_text_xml and has_vl_text_bin:
+        filtered: list[tuple[Path, Path]] = []
+        for file_path, relative_dst in matched:
+            if (
+                file_path.suffix.lower() in {".xml", ".bin"}
+                and file_path.name.startswith("qwen3_5_text")
+                and not file_path.name.startswith("qwen3_5_text_vl")
+            ):
+                log("SKIP", f"{relative_dst} (redundant when qwen3_5_text_vl_* is present)")
+                continue
+            filtered.append((file_path, relative_dst))
+        matched = filtered
+
+    names = {path.name for path, _ in matched}
+    issues: list[str] = []
+    if "config.json" not in names:
+        issues.append(f"Model package is missing required file: {model_dir / 'config.json'}")
+    if not any(name.startswith("qwen3_5_text") and name.endswith(".xml") for name in names):
+        issues.append(f"Model package is missing text IR XML files in {model_dir}")
+    if not any(name.startswith("qwen3_5_text") and name.endswith(".bin") for name in names):
+        issues.append(f"Model package is missing text IR BIN files in {model_dir}")
+    if issues:
+        return [], issues
+    return matched, []
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +284,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  python scripts\\package_serve.py\n"
             "  python scripts\\package_serve.py --clean\n"
             "  python scripts\\package_serve.py --output D:\\deploy\\serve_bundle\n"
+            "  python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B --model-subdir 9B\n"
+            "  python scripts\\package_serve.py --include-tokenizer-python\n"
         ),
     )
     p.add_argument("--clean", action="store_true",
@@ -172,6 +294,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Override output root (default: <workspace>/package_serve).")
     p.add_argument("--build-type", choices=("Release", "RelWithDebInfo"),
                    default="Release", help="Build configuration (default: Release).")
+    p.add_argument("--model-dir", type=str, default=None, metavar="DIR",
+                   help="Optional model directory to bundle under models/<name>.")
+    p.add_argument("--model-subdir", type=str, default=None, metavar="NAME",
+                   help="Destination subdirectory name under models/ (default: source directory name).")
+    p.add_argument("--include-hf-weights", action="store_true",
+                   help="Also bundle HuggingFace .safetensors weights. Default is IR-only packaging.")
+    p.add_argument("--include-tokenizer-python", action="store_true",
+                   help="Bundle Python openvino/openvino_tokenizers fallback packages for runtime tokenizer conversion.")
     return p
 
 
@@ -201,23 +331,41 @@ def main(argv: list[str] | None = None) -> int:
     log("INFO", f"Config    : {cfg}")
     log("INFO", f"Output    : {pkg_dir}")
     log("INFO", f"Executables: {', '.join(sorted(SERVE_EXECUTABLES))}")
+    log("INFO", f"Tokenizer Python fallback: {'enabled' if args.include_tokenizer_python else 'disabled'}")
+
+    model_dir = Path(args.model_dir).resolve() if args.model_dir else None
+    model_subdir = args.model_subdir or (model_dir.name if model_dir else None)
+    if model_dir is not None:
+        log("INFO", f"Model src : {model_dir}")
+        log("INFO", f"Model dst : {pkg_dir / 'models' / model_subdir}")
 
     stats = dict(matched=0, copied=0, overwritten=0, skipped=0, errors=0,
                  matched_bytes=0, written_bytes=0, cleaned=0, cleaned_bytes=0)
+    sources = BASE_SOURCES + (TOKENIZER_FALLBACK_SOURCES if args.include_tokenizer_python else ())
 
     # Clean
     if args.clean:
         for f in pkg_dir.iterdir():
-            if f.is_file() and f.suffix.lower() in {".dll", ".exe", ".ps1"}:
+            if f.is_file() and (f.suffix.lower() in PACKAGE_CLEAN_SUFFIXES or f.name in SERVE_EXECUTABLES):
                 sz = f.stat().st_size
                 log("CLEAN", f"{f.name} ({fmt(sz)})")
                 f.unlink()
                 stats["cleaned"] += 1
                 stats["cleaned_bytes"] += sz
+        for src in ALL_SOURCES:
+            if src.destination_subdir:
+                subtree = pkg_dir / src.destination_subdir
+                if subtree.exists():
+                    log("CLEAN", f"{subtree.relative_to(pkg_dir)}/")
+                    shutil.rmtree(subtree)
+        models_dir = pkg_dir / "models"
+        if models_dir.exists():
+            log("CLEAN", f"{models_dir.relative_to(pkg_dir)}/")
+            shutil.rmtree(models_dir)
         log("INFO", f"Cleaned {stats['cleaned']} file(s), {fmt(stats['cleaned_bytes'])}")
 
     # Collect and copy
-    for src in SOURCES:
+    for src in sources:
         files, issues = collect(src, ws, cfg)
         if issues:
             for iss in issues:
@@ -226,11 +374,11 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         log("INFO", f"{src.name}: {len(files)} file(s)")
-        for f in files:
+        for f, rel_dst in files:
             stats["matched"] += 1
             stats["matched_bytes"] += f.stat().st_size
             try:
-                action, written = copy_file(f, pkg_dir)
+                action, written = copy_file(f, pkg_dir, rel_dst)
             except Exception as e:
                 log("ERROR", f"Failed to copy {f}: {e}")
                 stats["errors"] += 1
@@ -244,11 +392,37 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 stats["skipped"] += 1
 
+    if model_dir is not None and model_subdir is not None:
+        files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights)
+        if issues:
+            for iss in issues:
+                log("ERROR", iss)
+            stats["errors"] += len(issues)
+        else:
+            log("INFO", f"Bundled model files: {len(files)} file(s)")
+            for f, rel_dst in files:
+                stats["matched"] += 1
+                stats["matched_bytes"] += f.stat().st_size
+                try:
+                    action, written = copy_file(f, pkg_dir, rel_dst)
+                except Exception as e:
+                    log("ERROR", f"Failed to copy {f}: {e}")
+                    stats["errors"] += 1
+                    continue
+                if action == "copied":
+                    stats["copied"] += 1
+                    stats["written_bytes"] += written
+                elif action == "overwritten":
+                    stats["overwritten"] += 1
+                    stats["written_bytes"] += written
+                else:
+                    stats["skipped"] += 1
+
     # Summary
-    final_files = [f for f in pkg_dir.iterdir() if f.is_file()]
+    final_files = [f for f in pkg_dir.rglob("*") if f.is_file()]
     final_bytes = sum(f.stat().st_size for f in final_files)
-    exes = [f.name for f in final_files if f.suffix.lower() == ".exe"]
-    dlls = [f.name for f in final_files if f.suffix.lower() == ".dll"]
+    executables = sorted(f.name for f in final_files if f.name in SERVE_EXECUTABLES)
+    runtime_libs = [f.name for f in final_files if f.suffix.lower() in {".dll", ".so", ".12", ".2"}]
 
     log("SUMMARY", "=" * 60)
     log("SUMMARY", f"Destination  : {pkg_dir}")
@@ -257,8 +431,10 @@ def main(argv: list[str] | None = None) -> int:
     log("SUMMARY", f"Errors       : {stats['errors']}")
     log("SUMMARY", f"Written      : {fmt(stats['written_bytes'])}")
     log("SUMMARY", f"Package total: {len(final_files)} files ({fmt(final_bytes)})")
-    log("SUMMARY", f"Executables  : {', '.join(sorted(exes))}")
-    log("SUMMARY", f"DLLs         : {len(dlls)}")
+    log("SUMMARY", f"Executables  : {', '.join(executables)}")
+    log("SUMMARY", f"Runtime libs : {len(runtime_libs)}")
+    if model_subdir is not None:
+        log("SUMMARY", f"Bundled model: models/{model_subdir}")
     log("SUMMARY", "=" * 60)
 
     return 1 if stats["errors"] else 0
