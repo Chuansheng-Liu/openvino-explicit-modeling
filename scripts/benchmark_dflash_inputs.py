@@ -62,7 +62,9 @@ BASELINE_EXE_CANDIDATES = [
 
 REPORT_DIR = ROOT_DIR / "dflash_exe_reports"
 
-QUESTIONS = [
+TEST_IMAGE_PATH = SCRIPT_DIR / "test.jpg"
+
+TEXT_QUESTIONS = [
     {
         "category": "Logical Reasoning",
         "prompt": "A farmer has 17 sheep. All but 9 run away. How many sheep does the farmer have left? Explain your reasoning step by step.",
@@ -122,6 +124,14 @@ QUESTIONS = [
             "Complete the analogy: 'Book is to reading as fork is to ___.' "
             "Explain your reasoning and provide two more analogies following the same pattern."
         ),
+    },
+]
+
+VL_QUESTIONS = [
+    {
+        "category": "VL: Image Description",
+        "prompt": "describe this picture in details: ",
+        "image": str(TEST_IMAGE_PATH),
     },
 ]
 
@@ -225,7 +235,8 @@ def parse_output(stdout: str) -> dict:
 
 def run_dflash(exe: Path, prompt: str, max_tokens: int, block_size: int,
                target_quant: str, draft_quant: str,
-               model_dir: Path = None, draft_dir: Path = None) -> str:
+               model_dir: Path = None, draft_dir: Path = None,
+               image_path: str = None) -> str:
     """Run the DFlash exe and return stdout."""
     cmd = [
         str(exe),
@@ -234,6 +245,8 @@ def run_dflash(exe: Path, prompt: str, max_tokens: int, block_size: int,
         str(max_tokens), str(block_size),
         target_quant, draft_quant,
     ]
+    if image_path:
+        cmd.append(image_path)
     result = subprocess.run(
         cmd, capture_output=True, text=True, timeout=600,
         encoding="utf-8", errors="replace",
@@ -242,16 +255,20 @@ def run_dflash(exe: Path, prompt: str, max_tokens: int, block_size: int,
 
 
 def run_baseline(exe: Path, prompt: str, max_tokens: int,
-                 model_dir: Path, quant: str) -> str:
+                 model_dir: Path, quant: str,
+                 image_path: str = None) -> str:
     """Run the baseline (non-speculative) exe and return stdout."""
+    mode = "vl" if image_path else "text"
     cmd = [
         str(exe),
         "--model", str(model_dir),
         "--cache-model",
-        "--mode", "text",
+        "--mode", mode,
         "--prompt", prompt,
         "--output-tokens", str(max_tokens),
     ]
+    if image_path:
+        cmd.extend(["--image", image_path])
     env = build_baseline_env(quant)
     result = subprocess.run(
         cmd, capture_output=True, text=True, timeout=600,
@@ -691,6 +708,8 @@ def main():
                         help="Draft model directory name (default: Qwen3.5-4B-Dflash)")
     parser.add_argument("--mode", choices=["dflash", "baseline", "both"], default="dflash",
                         help="What to benchmark: dflash, baseline, or both (default: dflash)")
+    parser.add_argument("--test-type", choices=["text", "vl", "all"], default="text",
+                        help="Test category type: text, vl, or all (default: text)")
     parser.add_argument("--dry-run", action="store_true", help="Print config without running")
     args = parser.parse_args()
 
@@ -711,17 +730,32 @@ def main():
     dflash_exe = find_exe(DFLASH_EXE_CANDIDATES, "DFlash") if run_dflash_mode else None
     baseline_exe = find_exe(BASELINE_EXE_CANDIDATES, "Baseline") if run_baseline_mode else None
 
+    # Build question pool based on --test-type
+    if args.test_type == "text":
+        question_pool = TEXT_QUESTIONS
+    elif args.test_type == "vl":
+        question_pool = VL_QUESTIONS
+    else:
+        question_pool = TEXT_QUESTIONS + VL_QUESTIONS
+
+    # Validate VL image exists when running VL tests
+    vl_in_pool = any(q.get("image") for q in question_pool)
+    if vl_in_pool and not TEST_IMAGE_PATH.exists():
+        print(f"ERROR: VL test image not found: {TEST_IMAGE_PATH}")
+        sys.exit(1)
+
     # Select categories
     if args.categories:
         indices = [int(x.strip()) for x in args.categories.split(",")]
-        questions = [QUESTIONS[i] for i in indices if 0 <= i < len(QUESTIONS)]
+        questions = [question_pool[i] for i in indices if 0 <= i < len(question_pool)]
     else:
-        questions = QUESTIONS
+        questions = question_pool
 
     total_runs = len(questions) * args.runs
     if args.mode == "both":
         total_runs *= 2
 
+    type_label = {"text": "Text", "vl": "Vision-Language", "all": "Text + VL"}
     mode_label = {"dflash": "DFlash only", "baseline": "Baseline only", "both": "DFlash + Baseline"}
     print()
     print("=" * 80)
@@ -729,6 +763,7 @@ def main():
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 80)
     print(f"  Mode           : {mode_label[args.mode]}")
+    print(f"  Test type      : {type_label[args.test_type]}")
     print(f"  Categories     : {len(questions)}")
     print(f"  Model          : {model_dir}")
     if run_dflash_mode:
@@ -763,6 +798,7 @@ def main():
             label = q["category"]
             if args.runs > 1:
                 label += f" (run {r})"
+            image_path = q.get("image")
 
             # --- Baseline run ---
             if run_baseline_mode:
@@ -771,11 +807,14 @@ def main():
                 print(f"\n[{run_idx}/{total_runs} {pct}%] [BASELINE] {label}")
                 print("-" * 70)
                 print(f"  Prompt: {q['prompt'][:100]}...")
+                if image_path:
+                    print(f"  Image:  {image_path}")
 
                 try:
                     stdout = run_baseline(
                         baseline_exe, q["prompt"], args.max_tokens,
                         model_dir=model_dir, quant=args.quant,
+                        image_path=image_path,
                     )
                     m = parse_output(stdout)
                     res = RunResult(
@@ -808,12 +847,15 @@ def main():
                 print(f"\n[{run_idx}/{total_runs} {pct}%] [DFLASH] {label}")
                 print("-" * 70)
                 print(f"  Prompt: {q['prompt'][:100]}...")
+                if image_path:
+                    print(f"  Image:  {image_path}")
 
                 try:
                     stdout = run_dflash(
                         dflash_exe, q["prompt"], args.max_tokens, args.block_size,
                         args.quant, args.quant,
                         model_dir=model_dir, draft_dir=draft_dir,
+                        image_path=image_path,
                     )
                     m = parse_output(stdout)
                     res = RunResult(
