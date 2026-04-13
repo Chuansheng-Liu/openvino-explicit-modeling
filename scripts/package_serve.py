@@ -17,6 +17,7 @@ import argparse
 import filecmp
 import shutil
 import struct
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -552,6 +553,23 @@ def main(argv: list[str] | None = None) -> int:
         n_links = _create_soname_symlinks(pkg_dir)
         if n_links:
             log("INFO", f"Created {n_links} soname symlink(s)")
+
+    # Patch RUNPATH to $ORIGIN so binaries find libs relative to themselves
+    if not IS_WINDOWS:
+        for exe_name in SERVE_EXECUTABLES:
+            exe_path = pkg_dir / exe_name
+            if exe_path.is_file():
+                try:
+                    subprocess.run(
+                        ["patchelf", "--set-rpath", "$ORIGIN", str(exe_path)],
+                        check=True, capture_output=True, text=True,
+                    )
+                    log("PATCH", f"{exe_name}: RUNPATH -> $ORIGIN")
+                except FileNotFoundError:
+                    log("WARN", "patchelf not found, skipping RUNPATH patch")
+                    break
+                except subprocess.CalledProcessError as e:
+                    log("WARN", f"patchelf failed on {exe_name}: {e.stderr.strip()}")
 
     # Summary
     final_files = [f for f in pkg_dir.rglob("*") if f.is_file()]
