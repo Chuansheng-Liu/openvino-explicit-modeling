@@ -41,23 +41,35 @@ ROOT_DIR   = OEM_DIR.parent                           # .../src_code (workspace 
 
 DEFAULT_MODEL_DIR = None  # Override with --models-root CLI arg
 DEVICE = "GPU"
+IS_WINDOWS = sys.platform == "win32"
 
-DLL_DIRS = [
-    ROOT_DIR / "openvino" / "bin" / "intel64" / "Release",
-    ROOT_DIR / "openvino" / "temp" / "Windows_AMD64" / "tbb" / "bin",
-    ROOT_DIR / "openvino.genai" / "build" / "openvino_genai",
-    ROOT_DIR / "openvino.genai" / "build" / "bin",
-    ROOT_DIR / "openvino.genai" / "build" / "bin" / "Release",
-]
+if IS_WINDOWS:
+    DLL_DIRS = [
+        ROOT_DIR / "openvino" / "bin" / "intel64" / "Release",
+        ROOT_DIR / "openvino" / "temp" / "Windows_AMD64" / "tbb" / "bin",
+        ROOT_DIR / "openvino.genai" / "build" / "openvino_genai",
+        ROOT_DIR / "openvino.genai" / "build" / "bin",
+        ROOT_DIR / "openvino.genai" / "build" / "bin" / "Release",
+    ]
+    _EXE = ".exe"
+else:
+    DLL_DIRS = [
+        ROOT_DIR / "openvino" / "bin" / "intel64" / "Release",
+        ROOT_DIR / "openvino" / "temp" / "Linux_x86_64" / "tbb" / "lib",
+        ROOT_DIR / "openvino.genai" / "build" / "openvino_genai",
+        ROOT_DIR / "openvino.genai" / "build" / "bin",
+        ROOT_DIR / "openvino.genai" / "build" / "bin" / "Release",
+    ]
+    _EXE = ""
 
 DFLASH_EXE_CANDIDATES = [
-    ROOT_DIR / "openvino.genai" / "build" / "bin" / "modeling_qwen3_5_dflash.exe",
-    ROOT_DIR / "openvino.genai" / "build" / "bin" / "Release" / "modeling_qwen3_5_dflash.exe",
+    ROOT_DIR / "openvino.genai" / "build" / "bin" / f"modeling_qwen3_5_dflash{_EXE}",
+    ROOT_DIR / "openvino.genai" / "build" / "bin" / "Release" / f"modeling_qwen3_5_dflash{_EXE}",
 ]
 
 BASELINE_EXE_CANDIDATES = [
-    ROOT_DIR / "openvino.genai" / "build" / "bin" / "modeling_qwen3_5.exe",
-    ROOT_DIR / "openvino.genai" / "build" / "bin" / "Release" / "modeling_qwen3_5.exe",
+    ROOT_DIR / "openvino.genai" / "build" / "bin" / f"modeling_qwen3_5{_EXE}",
+    ROOT_DIR / "openvino.genai" / "build" / "bin" / "Release" / f"modeling_qwen3_5{_EXE}",
 ]
 
 REPORT_DIR = ROOT_DIR / "dflash_exe_reports"
@@ -214,9 +226,13 @@ class RunResult:
 # ═════════════════════════════════════════════════════════════════
 
 def setup_env():
-    """Set DLL paths and required env vars."""
-    extra = ";".join(str(d) for d in DLL_DIRS if d.exists())
-    os.environ["PATH"] = extra + ";" + os.environ.get("PATH", "")
+    """Set library paths and required env vars."""
+    sep = ";" if IS_WINDOWS else ":"
+    extra = sep.join(str(d) for d in DLL_DIRS if d.exists())
+    if IS_WINDOWS:
+        os.environ["PATH"] = extra + sep + os.environ.get("PATH", "")
+    else:
+        os.environ["LD_LIBRARY_PATH"] = extra + sep + os.environ.get("LD_LIBRARY_PATH", "")
     os.environ["OV_GENAI_USE_MODELING_API"] = "1"
     os.environ["OV_GENAI_DISABLE_THINKING"] = "1"
 
@@ -226,7 +242,7 @@ def find_exe(candidates, label) -> Path:
         if p.exists():
             return p
     print(f"ERROR: {label} exe not found. Build first:")
-    print(f"  {OEM_DIR / 'build.bat'}")
+    print(f"  {OEM_DIR / ('build.bat' if IS_WINDOWS else 'build.sh')}")
     sys.exit(1)
 
 
