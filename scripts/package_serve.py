@@ -554,22 +554,33 @@ def main(argv: list[str] | None = None) -> int:
         if n_links:
             log("INFO", f"Created {n_links} soname symlink(s)")
 
-    # Patch RUNPATH to $ORIGIN so binaries find libs relative to themselves
+    # Patch RUNPATH to $ORIGIN so binaries and libs find each other locally
     if not IS_WINDOWS:
-        for exe_name in SERVE_EXECUTABLES:
-            exe_path = pkg_dir / exe_name
-            if exe_path.is_file():
-                try:
-                    subprocess.run(
-                        ["patchelf", "--set-rpath", "$ORIGIN", str(exe_path)],
-                        check=True, capture_output=True, text=True,
-                    )
-                    log("PATCH", f"{exe_name}: RUNPATH -> $ORIGIN")
-                except FileNotFoundError:
-                    log("WARN", "patchelf not found, skipping RUNPATH patch")
-                    break
-                except subprocess.CalledProcessError as e:
-                    log("WARN", f"patchelf failed on {exe_name}: {e.stderr.strip()}")
+        patchelf_ok = True
+        targets = [f for f in pkg_dir.glob("*") if f.is_file() and not f.is_symlink()
+                    and (f.name in SERVE_EXECUTABLES or f.suffix == ".so")]
+        for target in sorted(targets):
+            try:
+                result = subprocess.run(
+                    ["patchelf", "--print-rpath", str(target)],
+                    capture_output=True, text=True,
+                )
+                if result.returncode != 0 or "$ORIGIN" in result.stdout:
+                    continue
+                rpath = result.stdout.strip()
+                if not rpath:
+                    continue
+                subprocess.run(
+                    ["patchelf", "--set-rpath", "$ORIGIN", str(target)],
+                    check=True, capture_output=True, text=True,
+                )
+                log("PATCH", f"{target.name}: RUNPATH -> $ORIGIN")
+            except FileNotFoundError:
+                log("WARN", "patchelf not found, skipping RUNPATH patch")
+                patchelf_ok = False
+                break
+            except subprocess.CalledProcessError as e:
+                log("WARN", f"patchelf failed on {target.name}: {e.stderr.strip()}")
 
     # Summary
     final_files = [f for f in pkg_dir.rglob("*") if f.is_file()]
