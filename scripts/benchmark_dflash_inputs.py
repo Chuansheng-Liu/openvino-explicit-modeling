@@ -177,6 +177,11 @@ VL_QUESTIONS = [
         "prompt": "Analyze the spatial relationships in this image. What objects are near each other? What is in the foreground vs background? Describe the depth and perspective.",
         "image": str(TEST_IMAGE_PATH),
     },
+    {
+        "category": "VL: MIA-Bench",
+        "prompt": "Describe this image in detail. Include the main subject, background, colors, mood, and any notable details.",
+        "image": str(TEST_IMAGE_PATH),
+    },
 ]
 
 
