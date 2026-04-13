@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import filecmp
 import shutil
+import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -153,6 +154,112 @@ def fmt(size: int) -> str:
             return f"{s:.2f} {u}" if u != "B" else f"{int(s)} {u}"
         s /= 1024.0
     return f"{size} B"
+
+
+def _read_elf_soname(path: Path) -> str | None:
+    """Read the SONAME from an ELF shared library, or return None."""
+    try:
+        with open(path, "rb") as f:
+            magic = f.read(4)
+            if magic != b"\x7fELF":
+                return None
+            ei_class = struct.unpack("B", f.read(1))[0]
+            is64 = ei_class == 2
+            f.seek(0)
+            hdr_fmt = "<16sHHIQQQIHHHHHH" if is64 else "<16sHHIIIIIHHHHHH"
+            hdr_sz = struct.calcsize(hdr_fmt)
+            hdr = struct.unpack(hdr_fmt, f.read(hdr_sz))
+            e_phoff = hdr[5] if is64 else hdr[5]
+            e_phentsize = hdr[9]
+            e_phnum = hdr[10]
+            # Find PT_DYNAMIC
+            ptr_fmt = "Q" if is64 else "I"
+            ptr_sz = struct.calcsize(ptr_fmt)
+            dyn_off = dyn_sz = 0
+            for i in range(e_phnum):
+                f.seek(e_phoff + i * e_phentsize)
+                p_type = struct.unpack("<I", f.read(4))[0]
+                if p_type == 2:  # PT_DYNAMIC
+                    if is64:
+                        f.seek(e_phoff + i * e_phentsize + 8)
+                        dyn_off = struct.unpack("<Q", f.read(8))[0]
+                        dyn_sz = struct.unpack("<Q", f.read(8))[0]
+                    else:
+                        f.seek(e_phoff + i * e_phentsize + 4)
+                        dyn_off = struct.unpack("<I", f.read(4))[0]
+                        dyn_sz = struct.unpack("<I", f.read(4))[0]
+                    break
+            if not dyn_off:
+                return None
+            # Read dynamic entries to find DT_SONAME and DT_STRTAB
+            dyn_entry_fmt = f"<{'qQ' if is64 else 'iI'}"
+            dyn_entry_sz = struct.calcsize(dyn_entry_fmt)
+            soname_off = None
+            strtab_off = None
+            f.seek(dyn_off)
+            for _ in range(dyn_sz // dyn_entry_sz):
+                tag, val = struct.unpack(dyn_entry_fmt, f.read(dyn_entry_sz))
+                if tag == 14:  # DT_SONAME
+                    soname_off = val
+                elif tag == 5:  # DT_STRTAB
+                    strtab_off = val
+                if soname_off is not None and strtab_off is not None:
+                    break
+            if soname_off is None or strtab_off is None:
+                return None
+            # strtab_off is a virtual address; find file offset via program headers
+            strtab_file_off = None
+            for i in range(e_phnum):
+                f.seek(e_phoff + i * e_phentsize)
+                p_type = struct.unpack("<I", f.read(4))[0]
+                if p_type == 1:  # PT_LOAD
+                    if is64:
+                        f.seek(e_phoff + i * e_phentsize + 8)
+                        p_offset = struct.unpack("<Q", f.read(8))[0]
+                        p_vaddr = struct.unpack("<Q", f.read(8))[0]
+                        f.read(8)  # p_paddr
+                        p_filesz = struct.unpack("<Q", f.read(8))[0]
+                    else:
+                        f.seek(e_phoff + i * e_phentsize + 4)
+                        p_offset = struct.unpack("<I", f.read(4))[0]
+                        p_vaddr = struct.unpack("<I", f.read(4))[0]
+                        f.read(4)  # p_paddr
+                        p_filesz = struct.unpack("<I", f.read(4))[0]
+                    if p_vaddr <= strtab_off < p_vaddr + p_filesz:
+                        strtab_file_off = strtab_off - p_vaddr + p_offset
+                        break
+            if strtab_file_off is None:
+                return None
+            f.seek(strtab_file_off + soname_off)
+            name = b""
+            while True:
+                c = f.read(1)
+                if not c or c == b"\x00":
+                    break
+                name += c
+            return name.decode("utf-8") if name else None
+    except Exception:
+        return None
+
+
+def _create_soname_symlinks(pkg_dir: Path) -> int:
+    """Create versioned soname symlinks for packaged .so files."""
+    created = 0
+    for so_file in sorted(pkg_dir.glob("*.so")):
+        if so_file.is_symlink():
+            continue
+        soname = _read_elf_soname(so_file)
+        if not soname or soname == so_file.name:
+            continue
+        # Sanity: soname must look like a library filename (lib*.so.*)
+        if not soname.startswith("lib") or ".so." not in soname:
+            continue
+        link = pkg_dir / soname
+        if not link.exists():
+            link.symlink_to(so_file.name)
+            log("LINK", f"{soname} -> {so_file.name}")
+            created += 1
+    return created
 
 
 def _dest_path(src: FileSource, file_path: Path, root_path: Path | None = None) -> Path:
@@ -439,6 +546,12 @@ def main(argv: list[str] | None = None) -> int:
     if readme_src.is_file():
         shutil.copy2(readme_src, pkg_dir / "readme.txt")
         log("INFO", "Copied readme.txt to package root")
+
+    # Create versioned soname symlinks (Linux only)
+    if not IS_WINDOWS:
+        n_links = _create_soname_symlinks(pkg_dir)
+        if n_links:
+            log("INFO", f"Created {n_links} soname symlink(s)")
 
     # Summary
     final_files = [f for f in pkg_dir.rglob("*") if f.is_file()]
