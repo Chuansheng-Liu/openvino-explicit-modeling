@@ -4,3 +4,4 @@ mmlu_dev_data
 mmlu_redux_data
 
 .wheel-build-venvov_serve.log
+ov_serve.log

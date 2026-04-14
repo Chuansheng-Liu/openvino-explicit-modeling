@@ -138,6 +138,9 @@ def chat_stream(base_url: str, messages: list, *, tools: list | None = None,
                     if fn.get("arguments"):
                         entry["function"]["arguments"] += fn["arguments"]
 
+    # Strip stray quote chars that the streaming tokeniser may leak into names
+    for entry in tool_calls_accum.values():
+        entry["function"]["name"] = entry["function"]["name"].strip('"')
     tool_calls_list = [tool_calls_accum[i] for i in sorted(tool_calls_accum)]
     effective_finish = finish_reason or "stop"
     return {
@@ -170,6 +173,7 @@ class TestResult:
         perf = u.get("performance", {})
         self.tps = perf.get("throughput_tps", 0)
         self.ttft = perf.get("ttft_ms", 0)
+        self.prefix_cached_tokens = perf.get("prefix_cached_tokens", 0)
 
     def summary(self, verbose: bool = False) -> str:
         lines = [
@@ -177,6 +181,8 @@ class TestResult:
             f"  tokens        : {self.prompt_tokens} prompt + {self.completion_tokens} gen",
             f"  throughput    : {self.tps:.1f} t/s, ttft: {self.ttft:.0f}ms",
         ]
+        if self.prefix_cached_tokens > 0:
+            lines.append(f"  prefix cache  : {self.prefix_cached_tokens} tokens reused")
         if self.tool_calls:
             for tc in self.tool_calls:
                 fn = tc.get("function", {})
@@ -271,7 +277,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
 
     def run(name: str, messages, *, tools=None, max_tokens=256,
             expect_finish="stop", expect_tool_name=None, expect_content_contains=None,
-            expect_tool_count=None, stream=False,
+            expect_tool_count=None, expect_prefix_cache_min=None, stream=False,
             temperature=None, top_p=None):
         nonlocal test_num
         test_num += 1
@@ -317,6 +323,12 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             if expect_content_contains.lower() not in tr.content.lower():
                 passed = False
                 fail_reasons.append(f"content missing '{expect_content_contains}'")
+        if expect_prefix_cache_min is not None:
+            if tr.prefix_cached_tokens < expect_prefix_cache_min:
+                passed = False
+                fail_reasons.append(
+                    f"prefix_cached_tokens={tr.prefix_cached_tokens}, "
+                    f"expected>={expect_prefix_cache_min}")
         if tr.completion_tokens < 1:
             passed = False
             fail_reasons.append("0 completion tokens")
@@ -782,7 +794,68 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             print(f"  result        : {msg}")
             results.append((label, False, msg))
 
-    # ── 9. Final text (verify no state corruption) ──
+    # ── 10. Prefix cache reuse ──
+    # Test that multi-turn conversations reuse KV cache from previous turns.
+    # The second request in each pair should have prefix_cached_tokens > 0.
+
+    # 10a. Simple two-turn text conversation
+    run("prefix-cache: text turn 1 (cold)",
+        [{"role": "user", "content": "What is 2+2? Answer with just the number."}],
+        max_tokens=16)
+
+    run("prefix-cache: text turn 2 (should hit cache)",
+        [{"role": "user", "content": "What is 2+2? Answer with just the number."},
+         {"role": "assistant", "content": "<think>\n</think>\n\n4"},
+         {"role": "user", "content": "And what is 3+3? Answer with just the number."}],
+        max_tokens=16,
+        expect_prefix_cache_min=10)
+
+    # 10b. Two-turn with tools (verifies tool_defs at fixed position)
+    # Include a system message so tool_defs are anchored after it (not fallback path)
+    TOOLS_SYS = "You are a helpful weather assistant."
+    tr_tool1 = run("prefix-cache: tools turn 1 (cold)",
+        [{"role": "system", "content": TOOLS_SYS},
+         {"role": "user", "content": "What is the weather in Paris?"}],
+        tools=[WEATHER_TOOL],
+        max_tokens=64,
+        expect_finish="tool_calls",
+        expect_tool_name="get_weather")
+
+    # Build turn 2 from actual turn 1 response so cached tokens match exactly
+    tool1_msg = {"role": "assistant", "content": tr_tool1.content if tr_tool1 else ""}
+    if tr_tool1 and tr_tool1.tool_calls:
+        tool1_msg["tool_calls"] = tr_tool1.tool_calls
+    tool1_id = (tr_tool1.tool_calls[0].get("id", "call_1")
+                if tr_tool1 and tr_tool1.tool_calls else "call_1")
+
+    run("prefix-cache: tools turn 2 (should hit cache)",
+        [{"role": "system", "content": TOOLS_SYS},
+         {"role": "user", "content": "What is the weather in Paris?"},
+         tool1_msg,
+         {"role": "tool", "tool_call_id": tool1_id,
+          "content": '{"temp": 18, "condition": "sunny"}'},
+         {"role": "user", "content": "And what about London?"}],
+        tools=[WEATHER_TOOL],
+        max_tokens=64,
+        expect_finish="tool_calls",
+        expect_tool_name="get_weather",
+        expect_prefix_cache_min=10)
+
+    # 10c. Streaming two-turn (verify prefix cache works in stream mode too)
+    tr_stream1 = run("prefix-cache: stream turn 1 (cold)",
+        [{"role": "user", "content": "Name one color. Be brief."}],
+        max_tokens=16, stream=True)
+
+    # Use actual turn 1 response so cached tokens match exactly
+    stream1_content = tr_stream1.content if tr_stream1 else "Blue"
+    run("prefix-cache: stream turn 2 (should hit cache)",
+        [{"role": "user", "content": "Name one color. Be brief."},
+         {"role": "assistant", "content": stream1_content},
+         {"role": "user", "content": "Name another color. Be brief."}],
+        max_tokens=16, stream=True,
+        expect_prefix_cache_min=10)
+
+    # ── 11. Final text (verify no state corruption) ──
     run("text: final check",
         [{"role": "user", "content": "Say hello in Japanese, Chinese, and Korean. Be brief."}],
         max_tokens=64)
