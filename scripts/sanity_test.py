@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sanity tests for ov_serve: text, VL, mixed sequences, and tool calling.
+"""Sanity tests for ov_serve: text, VL, mixed sequences, tool calling, and Nebula integration.
 
 Usage:
     python scripts/sanity_test.py                          # default localhost:8080
@@ -16,7 +16,9 @@ Tests (run sequentially to verify prefix cache / session reuse):
   4. text + vl + text  — text, then VL, then text
   5. multi-image VL + text + multi-image VL
   6. tool calling      — single, multi-turn, no-tools baseline
-  7. text              — final text (verify no state corruption)
+  7. hermes agent      — multi-step agent simulation
+  8. nebula            — Automotive.AI-1.7.1 integration patterns
+  9. text              — final text (verify no state corruption)
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -57,7 +60,8 @@ def post_json(url: str, payload: dict, timeout: int = 120) -> dict:
 
 
 def chat(base_url: str, messages: list, *, tools: list | None = None,
-         max_tokens: int = 256, model: str = "qwen3.5") -> dict:
+         max_tokens: int = 256, model: str = "qwen3.5",
+         temperature: float | None = None, top_p: float | None = None) -> dict:
     payload: dict = {
         "model": model,
         "messages": messages,
@@ -66,11 +70,16 @@ def chat(base_url: str, messages: list, *, tools: list | None = None,
     }
     if tools:
         payload["tools"] = tools
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if top_p is not None:
+        payload["top_p"] = top_p
     return post_json(f"{base_url}/v1/chat/completions", payload)
 
 
 def chat_stream(base_url: str, messages: list, *, tools: list | None = None,
-                max_tokens: int = 256, model: str = "qwen3.5") -> dict:
+                max_tokens: int = 256, model: str = "qwen3.5",
+                temperature: float | None = None, top_p: float | None = None) -> dict:
     """Streaming chat — reassemble SSE chunks into a single response dict."""
     payload: dict = {
         "model": model,
@@ -80,6 +89,10 @@ def chat_stream(base_url: str, messages: list, *, tools: list | None = None,
     }
     if tools:
         payload["tools"] = tools
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if top_p is not None:
+        payload["top_p"] = top_p
     body = json.dumps(payload).encode()
     req = urllib.request.Request(
         f"{base_url}/v1/chat/completions", data=body,
@@ -258,7 +271,8 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
 
     def run(name: str, messages, *, tools=None, max_tokens=256,
             expect_finish="stop", expect_tool_name=None, expect_content_contains=None,
-            expect_tool_count=None, stream=False):
+            expect_tool_count=None, stream=False,
+            temperature=None, top_p=None):
         nonlocal test_num
         test_num += 1
         label = f"[{test_num}] {name}"
@@ -268,9 +282,11 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         t0 = time.time()
         try:
             if stream:
-                resp = chat_stream(base_url, messages, tools=tools, max_tokens=max_tokens)
+                resp = chat_stream(base_url, messages, tools=tools, max_tokens=max_tokens,
+                                   temperature=temperature, top_p=top_p)
             else:
-                resp = chat(base_url, messages, tools=tools, max_tokens=max_tokens)
+                resp = chat(base_url, messages, tools=tools, max_tokens=max_tokens,
+                            temperature=temperature, top_p=top_p)
         except Exception as e:
             msg = f"FAIL: {e}"
             print(f"  {msg}")
@@ -629,7 +645,120 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         expect_finish="tool_calls",
         expect_tool_name="web_search")
 
-    # ── 8. Final text (verify no state corruption) ──
+    # ── 8. Nebula Automotive.AI integration ──
+    # Mirror exact request patterns from Nebula Automotive.AI-1.7.1 to verify
+    # ov_serve works as a drop-in LLM backend for the Nebula agent framework.
+
+    NEBULA_SYSTEM = (
+        "你是人工智能助手问问, 你可以根据训练所的的知识, "
+        "用中文回答用户的问题, 或者用自然语言描述用户提供的图片. "
+        "你可以自行判断是否使用其他工具来获取信息或者完成用户的任务."
+    )
+
+    # 8a: Chinese system prompt + streaming text
+    run("nebula: chinese streaming (8a)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "北京是哪个国家的首都？用一句话回答。"}],
+        stream=True,
+        max_tokens=64)
+
+    # 8b: Multi-turn 5-turn conversation (streaming, Nebula accumulates history)
+    run("nebula: multi-turn 5-turn (8b)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "你好"},
+         {"role": "assistant", "content": "你好！有什么可以帮助你的吗？"},
+         {"role": "user", "content": "今天天气怎么样？"},
+         {"role": "assistant", "content": "抱歉，我无法获取实时天气信息。"},
+         {"role": "user", "content": "我在上海"},
+         {"role": "assistant", "content": "上海是个美丽的城市！"},
+         {"role": "user", "content": "上海有什么好玩的？"},
+         {"role": "assistant", "content": "上海有很多好玩的地方，比如外滩、东方明珠、豫园等。"},
+         {"role": "user", "content": "外滩在哪里？用一句话回答。"}],
+        stream=True,
+        max_tokens=128)
+
+    # 8c: Vision + Chinese description (Nebula's primary VL use case, streaming)
+    run("nebula: vision chinese (8c)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": [
+             {"type": "image_url", "image_url": {"url": img1_uri}},
+             {"type": "text", "text": "用中文描述这张图片，一句话。"}
+         ]}],
+        stream=True,
+        max_tokens=128)
+
+    # 8d: Multi-turn with image mid-conversation
+    run("nebula: mid-conversation image (8d)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "你好，我想了解一些图片。"},
+         {"role": "assistant", "content": "好的，请发送你想了解的图片。"},
+         {"role": "user", "content": [
+             {"type": "image_url", "image_url": {"url": img1_uri}},
+             {"type": "text", "text": "这张图片里有什么？一句话回答。"}
+         ]}],
+        max_tokens=128)
+
+    # 8e: Null content in assistant message (Nebula edge case)
+    run("nebula: null assistant content (8e)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "你好"},
+         {"role": "assistant", "content": None},
+         {"role": "user", "content": "1加1等于几？只回答数字。"}],
+        max_tokens=16)
+
+    # 8f: Nebula exact parameters (temperature=0.7, top_p=0.8)
+    run("nebula: temp=0.7 top_p=0.8 (8f)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "用中文解释什么是人工智能，一句话。"}],
+        temperature=0.7,
+        top_p=0.8,
+        max_tokens=128)
+
+    # 8g: Concurrent requests — Nebula may serve multiple users simultaneously
+    test_num += 1
+    label = f"[{test_num}] nebula: concurrent requests (8g)"
+    print(f"\n{'='*60}")
+    print(f"  {label}")
+    print(f"{'='*60}")
+    t0 = time.time()
+
+    def _nebula_req(prompt):
+        return chat(base_url,
+                    [{"role": "system", "content": NEBULA_SYSTEM},
+                     {"role": "user", "content": prompt}],
+                    max_tokens=32, temperature=0.7, top_p=0.8)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f1 = pool.submit(_nebula_req, "1加1等于几？只回答数字。")
+        f2 = pool.submit(_nebula_req, "2加3等于几？只回答数字。")
+        try:
+            r1 = f1.result(timeout=120)
+            r2 = f2.result(timeout=120)
+            elapsed = time.time() - t0
+            c1 = r1["choices"][0]["message"].get("content", "") or ""
+            c2 = r2["choices"][0]["message"].get("content", "") or ""
+            ok1 = r1["choices"][0]["finish_reason"] in ("stop", "length")
+            ok2 = r2["choices"][0]["finish_reason"] in ("stop", "length")
+            passed = ok1 and ok2
+            fail_reasons = []
+            if not ok1:
+                fail_reasons.append(f"req1 finish={r1['choices'][0]['finish_reason']}")
+            if not ok2:
+                fail_reasons.append(f"req2 finish={r2['choices'][0]['finish_reason']}")
+            msg = "PASS" if passed else f"FAIL: {'; '.join(fail_reasons)}"
+            print(f"  response 1    : {c1[:80]}")
+            print(f"  response 2    : {c2[:80]}")
+            print(f"  wall time     : {elapsed:.1f}s")
+            print(f"  result        : {msg}")
+            results.append((label, passed, msg))
+        except Exception as e:
+            elapsed = time.time() - t0
+            msg = f"FAIL: {e}"
+            print(f"  wall time     : {elapsed:.1f}s")
+            print(f"  result        : {msg}")
+            results.append((label, False, msg))
+
+    # ── 9. Final text (verify no state corruption) ──
     run("text: final check",
         [{"role": "user", "content": "Say hello in Japanese, Chinese, and Korean. Be brief."}],
         max_tokens=64)
