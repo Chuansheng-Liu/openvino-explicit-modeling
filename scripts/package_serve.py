@@ -419,8 +419,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Destination subdirectory name under models/ (default: source directory name).")
     p.add_argument("--include-hf-weights", action="store_true",
                    help="Also bundle HuggingFace .safetensors weights. Default is IR-only packaging.")
-    p.add_argument("--group-size", type=int, default=128, metavar="N",
-                   help="Only package text IR files matching this group size (default: 128).\n"
+    p.add_argument("--group-size", type=int, default=32, metavar="N",
+                   help="Only package text IR files matching this group size (default: 32).\n"
                         "Set to 0 to include all group sizes.")
     p.add_argument("--include-tokenizer-python", action="store_true",
                    help="Bundle Python openvino/openvino_tokenizers fallback packages for runtime tokenizer conversion.")

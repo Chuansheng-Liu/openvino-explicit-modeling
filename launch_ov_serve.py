@@ -211,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     env = os.environ.copy()
     env["OV_GENAI_USE_MODELING_API"] = "1"
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym")
-    env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "128")
+    env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "32")
     resolved_runtime_dirs = _prepend_env_paths(env, PATH_VAR, runtime_dirs)
     _configure_tokenizer_python(env, script_dir, workspace_root)
 
@@ -272,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
             "warmup_tokens": args.warmup_tokens,
             "logging": args.log,
             "quant_mode": env.get("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym"),
-            "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "128"),
+            "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "32"),
         },
         resolved_runtime_dirs,
         log_file,

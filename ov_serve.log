@@ -1,0 +1,6 @@
+[ov_serve] Loading model from /deploy/qwen3_5_9b_dflash_g32_safetensors/Release/models/9B ...
+terminate called after throwing an instance of 'ov::NodeValidationFailure'
+  what():  Check 'get_input_size() == 5' failed at src/core/src/op/fused_conv.cpp:54:
+While validating node 'extension::FusedConv FusedConv_9626 (opset1::Transpose Transpose_9612[0]:f32[?,8192,?], opset1::Reshape Reshape_9625[0]:f32[8192,4], opset1::Parameter beam_idx[0]:i32[?], opset3::Broadcast Broadcast_9621[0]:f32[?,8192,4]) -> (dynamic[...])' with friendly_name 'FusedConv_9626':
+FusedConv expects 5 inputs, but it has 4
+
