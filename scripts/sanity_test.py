@@ -644,6 +644,31 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         expect_finish="tool_calls",
         expect_tool_name="web_search")
 
+    # 7h: Long system prompt + tools — regression test for Hermes agent hang.
+    # When the system prompt is very large (>2K tokens), tool definitions must
+    # still be visible to the model.  This failed before the fix that moved
+    # <tools> to a separate system message near end-of-context.
+    LONG_HERMES_SYSTEM = (
+        HERMES_SYSTEM + "\n\n"
+        "## Agent Guidelines\n\n"
+        + "\n".join(
+            f"Guideline {i}: When the user asks you to perform task type {i}, "
+            f"always use the most appropriate tool. Be thorough and precise."
+            for i in range(30)
+        )
+        + "\n\n## Memory\n\n"
+        + "\n".join(f"- User preference {i}: setting_{i}=value_{i}" for i in range(20))
+        + "\n\n## Session Context\n\nThis is a long-running agent session.\n"
+    )
+
+    run("agent: long sysprompt + tools (7h)",
+        [{"role": "system", "content": LONG_HERMES_SYSTEM},
+         {"role": "user", "content": "What is the weather in Paris right now?"}],
+        tools=[WEATHER_TOOL, SEARCH_TOOL, GET_TIME_TOOL],
+        max_tokens=512,
+        expect_finish="tool_calls",
+        expect_tool_name="get_weather")
+
     # ── 8. Nebula Automotive.AI integration ──
     # Mirror exact request patterns from Nebula Automotive.AI-1.7.1 to verify
     # ov_serve works as a drop-in LLM backend for the Nebula agent framework.
