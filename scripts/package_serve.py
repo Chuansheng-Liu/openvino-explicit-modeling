@@ -383,7 +383,7 @@ def _find_runtime_dirs(ws: Path, cfg: str) -> list[Path]:
 
 
 def generate_ir(ws: Path, cfg: str, model_dir: Path, group_size: int | None,
-                quant_mode: str, vl: bool) -> bool:
+                quant_mode: str, vl: bool, dflash_dir: Path | None = None) -> bool:
     """Run convert_ir to generate model IR files. Returns True on success."""
     exe = _find_convert_ir(ws, cfg)
     if exe is None:
@@ -393,6 +393,8 @@ def generate_ir(ws: Path, cfg: str, model_dir: Path, group_size: int | None,
     cmd = [str(exe), "--model", str(model_dir), "--force"]
     if vl:
         cmd.append("--vl")
+    if dflash_dir is not None:
+        cmd.extend(["--dflash", str(dflash_dir)])
 
     env = os.environ.copy()
     env["OV_GENAI_USE_MODELING_API"] = "1"
@@ -431,7 +433,8 @@ def generate_ir(ws: Path, cfg: str, model_dir: Path, group_size: int | None,
 
 
 def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: bool,
-                        group_size: int | None = None) -> tuple[list[tuple[Path, Path]], list[str]]:
+                        group_size: int | None = None,
+                        dflash_dir: Path | None = None) -> tuple[list[tuple[Path, Path]], list[str]]:
     if not model_dir.exists():
         return [], [f"Model directory not found: {model_dir}"]
     if not model_dir.is_dir():
@@ -440,6 +443,10 @@ def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: 
     # Build group-size tag for filtering IR files (e.g. "_g128.")
     gs_tag = f"_g{group_size}." if group_size is not None else None
 
+    # IR prefixes that should be filtered by group size
+    _GS_FILTERED_PREFIXES = ("qwen3_5_text", "qwen3_5_dflash_target", "qwen3_5_dflash_combined_draft")
+    # context_fc is always FP16 (no group-size suffix) — not filtered
+
     matched: list[tuple[Path, Path]] = []
     for file_path in sorted(model_dir.iterdir()):
         if not file_path.is_file():
@@ -447,7 +454,7 @@ def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: 
         # Filter IR files by group size when specified
         if file_path.suffix.lower() in {".xml", ".bin"}:
             stem = file_path.stem + file_path.suffix  # full filename
-            if gs_tag is not None and file_path.name.startswith("qwen3_5_text"):
+            if gs_tag is not None and any(file_path.name.startswith(p) for p in _GS_FILTERED_PREFIXES):
                 if gs_tag not in stem:
                     log("SKIP", f"{file_path.name} (group_size != {group_size})")
                     continue
@@ -518,14 +525,18 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Optional model directory to bundle under models/<dirname>.")
     p.add_argument("--include-hf-weights", action="store_true",
                    help="Also bundle HuggingFace .safetensors weights. Default is IR-only packaging.")
-    p.add_argument("--group-size", type=int, default=32, metavar="N",
-                   help="Only package text IR files matching this group size (default: 32).\n"
+    p.add_argument("--group-size", type=int, default=128, metavar="N",
+                   help="Only package text IR files matching this group size (default: 128).\n"
                         "Set to 0 to include all group sizes.")
     p.add_argument("--quant-mode", type=str, default="int4_asym",
                    choices=["int4_sym", "int4_asym", "int8_sym", "int8_asym"],
                    help="Quantization mode for IR generation (default: int4_asym).")
     p.add_argument("--no-vl", action="store_true",
                    help="Skip vision-language IR generation (VL is enabled by default).")
+    p.add_argument("--dflash-dir", type=str, default=None, metavar="DIR",
+                   help="DFlash draft model directory. When specified, also generates and bundles\n"
+                        "DFlash sub-model IRs (target, context_fc, combined_draft_v2).\n"
+                        "Draft model metadata (config.json) is bundled under models/<dflash_dirname>.")
     p.add_argument("--include-tokenizer-python", action="store_true",
                    help="Bundle Python openvino/openvino_tokenizers fallback packages for runtime tokenizer conversion.")
     return p
@@ -561,6 +572,7 @@ def main(argv: list[str] | None = None) -> int:
 
     model_dir = Path(args.model_dir).resolve() if args.model_dir else None
     model_subdir = model_dir.name if model_dir else None
+    dflash_dir = Path(args.dflash_dir).resolve() if args.dflash_dir else None
     group_size = args.group_size if args.group_size != 0 else None
     if model_dir is not None:
         log("INFO", f"Model src : {model_dir}")
@@ -626,10 +638,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.clean or _needs_ir_generation(model_dir, group_size, vl):
             reason = "forced by --clean" if args.clean else "text IR not found"
             log("INFO", f"Generating IR ({reason})...")
-            if not generate_ir(ws, cfg, model_dir, group_size, args.quant_mode, vl):
+            if not generate_ir(ws, cfg, model_dir, group_size, args.quant_mode, vl, dflash_dir):
                 log("ERROR", "IR generation failed, cannot bundle model")
                 return 1
-        files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights, group_size)
+        files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights,
+                                            group_size, dflash_dir)
         if issues:
             for iss in issues:
                 log("ERROR", iss)
@@ -653,6 +666,37 @@ def main(argv: list[str] | None = None) -> int:
                     stats["written_bytes"] += written
                 else:
                     stats["skipped"] += 1
+
+        # Bundle DFlash draft model metadata (config.json etc.) if --dflash-dir specified
+        if dflash_dir is not None and dflash_dir.is_dir():
+            dflash_subdir = dflash_dir.name
+            dflash_meta_count = 0
+            for file_path in sorted(dflash_dir.iterdir()):
+                if not file_path.is_file():
+                    continue
+                if file_path.name in MODEL_METADATA_FILES:
+                    rel_dst = Path("models") / dflash_subdir / file_path.name
+                    stats["matched"] += 1
+                    stats["matched_bytes"] += file_path.stat().st_size
+                    try:
+                        action, written = copy_file(file_path, pkg_dir, rel_dst)
+                    except Exception as e:
+                        log("ERROR", f"Failed to copy {file_path}: {e}")
+                        stats["errors"] += 1
+                        continue
+                    if action == "copied":
+                        stats["copied"] += 1
+                        stats["written_bytes"] += written
+                    elif action == "overwritten":
+                        stats["overwritten"] += 1
+                        stats["written_bytes"] += written
+                    else:
+                        stats["skipped"] += 1
+                    dflash_meta_count += 1
+            if dflash_meta_count > 0:
+                log("INFO", f"Bundled DFlash draft metadata: {dflash_meta_count} file(s) from {dflash_subdir}")
+            else:
+                log("WARN", f"No metadata files found in DFlash draft dir: {dflash_dir}")
 
     # Copy readme.txt to package root
     readme_src = Path(__file__).resolve().parent.parent / "serving" / "readme.txt"
