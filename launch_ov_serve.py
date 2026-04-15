@@ -195,6 +195,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--group-size", type=int, default=128, help="Quantization group size (e.g. 32, 128).")
     parser.add_argument("--dflash-dir", type=Path, default=None,
                         help="Path to DFlash draft model directory. Enables speculative decoding.")
+    parser.add_argument("--no-dflash", action="store_true", default=False,
+                        help="Disable DFlash speculative decoding even if draft directory is found.")
     log_group = parser.add_mutually_exclusive_group()
     log_group.add_argument("--log", action="store_true", dest="log",
                            help="Enable stderr logging to ov_serve.log.")
@@ -258,17 +260,19 @@ def main(argv: list[str] | None = None) -> int:
     if not args.log:
         cmd.append("--no-log")
 
-    # DFlash: auto-detect or use explicit path
-    dflash_dir = args.dflash_dir
-    if dflash_dir is None:
-        # Auto-detect: look for *-DFlash directory alongside target model
-        candidate = model.parent / (model.name + "-DFlash")
-        if candidate.is_dir():
-            dflash_dir = candidate
-    if dflash_dir is not None:
-        if not dflash_dir.is_dir():
-            raise SystemExit(f"DFlash draft directory not found: {dflash_dir}")
-        cmd.extend(["--dflash-dir", str(dflash_dir)])
+    # DFlash: auto-detect or use explicit path (--no-dflash disables)
+    dflash_dir = None
+    if not args.no_dflash:
+        dflash_dir = args.dflash_dir
+        if dflash_dir is None:
+            # Auto-detect: look for *-DFlash directory alongside target model
+            candidate = model.parent / (model.name + "-DFlash")
+            if candidate.is_dir():
+                dflash_dir = candidate
+        if dflash_dir is not None:
+            if not dflash_dir.is_dir():
+                raise SystemExit(f"DFlash draft directory not found: {dflash_dir}")
+            cmd.extend(["--dflash-dir", str(dflash_dir)])
 
     log_file = script_dir / "ov_serve.log" if args.log else None
     banner_text = _print_banner(
