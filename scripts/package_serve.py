@@ -621,10 +621,11 @@ def main(argv: list[str] | None = None) -> int:
                 stats["skipped"] += 1
 
     if model_dir is not None and model_subdir is not None:
-        # Auto-generate IR if missing
+        # Regenerate IR: always when --clean, otherwise only if missing
         vl = not args.no_vl
-        if _needs_ir_generation(model_dir, group_size, vl):
-            log("INFO", "Text IR not found in model directory, generating...")
+        if args.clean or _needs_ir_generation(model_dir, group_size, vl):
+            reason = "forced by --clean" if args.clean else "text IR not found"
+            log("INFO", f"Generating IR ({reason})...")
             if not generate_ir(ws, cfg, model_dir, group_size, args.quant_mode, vl):
                 log("ERROR", "IR generation failed, cannot bundle model")
                 return 1
