@@ -18,7 +18,9 @@ Tests (run sequentially to verify prefix cache / session reuse):
   6. tool calling      — single, multi-turn, no-tools baseline
   7. hermes agent      — multi-step agent simulation
   8. nebula            — Automotive.AI-1.7.1 integration patterns
-  9. text              — final text (verify no state corruption)
+  9. prefix cache      — cache reuse verification
+ 10. category inputs   — diverse prompt categories (math, code, creative, etc.)
+ 11. text              — final text (verify no state corruption)
 """
 
 from __future__ import annotations
@@ -855,7 +857,34 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         max_tokens=16, stream=True,
         expect_prefix_cache_min=10)
 
-    # ── 11. Final text (verify no state corruption) ──
+    # ── 11. Category input quality tests ──
+    # Tests diverse prompt categories to verify generation quality (from benchmark_dflash_inputs.py)
+
+    run("category: logical reasoning",
+        [{"role": "user", "content": "A farmer has 17 sheep. All but 9 run away. How many sheep does the farmer have left? Explain briefly."}],
+        max_tokens=128, expect_content_contains="9")
+
+    run("category: math calculation",
+        [{"role": "user", "content": "Calculate 347 * 28 - 1523. Show your work briefly."}],
+        max_tokens=256, expect_content_contains="8193")
+
+    run("category: code generation",
+        [{"role": "user", "content": "Write a Python function called 'fibonacci' that takes an integer n and returns the nth Fibonacci number using dynamic programming. Include a brief docstring."}],
+        max_tokens=256, expect_content_contains="fibonacci")
+
+    run("category: creative writing",
+        [{"role": "user", "content": "Write a short poem (4 lines) about sunrise over the ocean."}],
+        max_tokens=128)
+
+    run("category: translation",
+        [{"role": "user", "content": "Translate 'The quick brown fox jumps over the lazy dog' into French and German."}],
+        max_tokens=128)
+
+    run("category: summarization",
+        [{"role": "user", "content": "Summarize in 1-2 sentences: 'Artificial intelligence has transformed industries ranging from healthcare to finance, enabling advanced diagnostics and automated trading. These developments raise debates about job displacement and data privacy.'"}],
+        max_tokens=128)
+
+    # ── 12. Final text (verify no state corruption) ──
     run("text: final check",
         [{"role": "user", "content": "Say hello in Japanese, Chinese, and Korean. Be brief."}],
         max_tokens=64)
