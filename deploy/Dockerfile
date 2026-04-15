@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
     && rm -rf /var/lib/apt/lists/*
 
+# Intel GPU drivers (place .deb files in drivers/ next to this Dockerfile)
+# Default location: /home/gta/chuansheng/drivers/
 COPY drivers/ /tmp/drivers/
 RUN dpkg -i /tmp/drivers/*.deb && rm -rf /tmp/drivers/
 
