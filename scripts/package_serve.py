@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import os
 import shutil
 import struct
 import subprocess
@@ -329,6 +330,106 @@ def copy_file(src: Path, dst_dir: Path, relative_dst: Path) -> tuple[str, int]:
     return "copied", sz
 
 
+# ---------------------------------------------------------------------------
+# IR generation
+# ---------------------------------------------------------------------------
+
+CONVERT_IR_EXE = "convert_ir.exe" if IS_WINDOWS else "convert_ir"
+
+
+def _needs_ir_generation(model_dir: Path, group_size: int | None, vl: bool) -> bool:
+    """Return True if the expected text IR files are missing from model_dir."""
+    gs_tag = f"_g{group_size}" if group_size is not None else ""
+    vl_tag = "_vl" if vl else ""
+    # Look for qwen3_5_text[_vl]_*[_gN].xml
+    for f in model_dir.iterdir():
+        if not f.is_file():
+            continue
+        name = f.name
+        if name.startswith("qwen3_5_text") and name.endswith(".xml"):
+            if vl_tag and vl_tag not in name:
+                continue
+            if gs_tag and gs_tag not in name:
+                continue
+            return False
+    return True
+
+
+def _find_convert_ir(ws: Path, cfg: str) -> Path | None:
+    """Locate convert_ir executable in the build tree."""
+    candidates = [
+        ws / "openvino.genai" / "build" / "bin" / cfg / CONVERT_IR_EXE,
+        ws / "openvino.genai" / "build" / "bin" / CONVERT_IR_EXE,
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
+def _find_runtime_dirs(ws: Path, cfg: str) -> list[Path]:
+    """Return runtime library directories needed for convert_ir."""
+    dirs = []
+    ov_bin = ws / "openvino" / "bin" / "intel64" / cfg
+    if ov_bin.is_dir():
+        dirs.append(ov_bin)
+    tbb_dir = ws / TBB_RELATIVE
+    if tbb_dir.is_dir():
+        dirs.append(tbb_dir)
+    genai_lib = ws / "openvino.genai" / "build" / "openvino_genai"
+    if genai_lib.is_dir():
+        dirs.append(genai_lib)
+    return dirs
+
+
+def generate_ir(ws: Path, cfg: str, model_dir: Path, group_size: int | None,
+                quant_mode: str, vl: bool) -> bool:
+    """Run convert_ir to generate model IR files. Returns True on success."""
+    exe = _find_convert_ir(ws, cfg)
+    if exe is None:
+        log("ERROR", f"convert_ir executable not found in build tree")
+        return False
+
+    cmd = [str(exe), "--model", str(model_dir), "--force"]
+    if vl:
+        cmd.append("--vl")
+
+    env = os.environ.copy()
+    env["OV_GENAI_USE_MODELING_API"] = "1"
+    env["OV_GENAI_INFLIGHT_QUANT_MODE"] = quant_mode
+    if group_size is not None:
+        env["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = str(group_size)
+
+    # Add runtime dirs to PATH/LD_LIBRARY_PATH
+    runtime_dirs = _find_runtime_dirs(ws, cfg)
+    if IS_WINDOWS:
+        path_var = "PATH"
+    else:
+        path_var = "LD_LIBRARY_PATH"
+    existing = env.get(path_var, "")
+    prepend = os.pathsep.join(str(d) for d in runtime_dirs)
+    env[path_var] = prepend + os.pathsep + existing if existing else prepend
+
+    log("INFO", f"Generating IR: {' '.join(cmd)}")
+    log("INFO", f"  quant_mode={quant_mode}, group_size={group_size}")
+    try:
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
+        sys.stdout.write(result.stdout)
+        if result.stderr:
+            sys.stderr.write(result.stderr)
+        if result.returncode != 0:
+            log("ERROR", f"convert_ir failed with exit code {result.returncode}")
+            return False
+        log("INFO", "IR generation completed successfully")
+        return True
+    except subprocess.TimeoutExpired:
+        log("ERROR", "convert_ir timed out (600s)")
+        return False
+    except Exception as e:
+        log("ERROR", f"Failed to run convert_ir: {e}")
+        return False
+
+
 def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: bool,
                         group_size: int | None = None) -> tuple[list[tuple[Path, Path]], list[str]]:
     if not model_dir.exists():
@@ -419,9 +520,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Destination subdirectory name under models/ (default: source directory name).")
     p.add_argument("--include-hf-weights", action="store_true",
                    help="Also bundle HuggingFace .safetensors weights. Default is IR-only packaging.")
-    p.add_argument("--group-size", type=int, default=32, metavar="N",
-                   help="Only package text IR files matching this group size (default: 32).\n"
+    p.add_argument("--group-size", type=int, default=128, metavar="N",
+                   help="Only package text IR files matching this group size (default: 128).\n"
                         "Set to 0 to include all group sizes.")
+    p.add_argument("--quant-mode", type=str, default="int4_asym",
+                   choices=["int4_sym", "int4_asym", "int8_sym", "int8_asym"],
+                   help="Quantization mode for IR generation (default: int4_asym).")
+    p.add_argument("--no-vl", action="store_true",
+                   help="Skip vision-language IR generation (VL is enabled by default).")
     p.add_argument("--include-tokenizer-python", action="store_true",
                    help="Bundle Python openvino/openvino_tokenizers fallback packages for runtime tokenizer conversion.")
     return p
@@ -517,6 +623,13 @@ def main(argv: list[str] | None = None) -> int:
                 stats["skipped"] += 1
 
     if model_dir is not None and model_subdir is not None:
+        # Auto-generate IR if missing
+        vl = not args.no_vl
+        if _needs_ir_generation(model_dir, group_size, vl):
+            log("INFO", "Text IR not found in model directory, generating...")
+            if not generate_ir(ws, cfg, model_dir, group_size, args.quant_mode, vl):
+                log("ERROR", "IR generation failed, cannot bundle model")
+                return 1
         files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights, group_size)
         if issues:
             for iss in issues:
