@@ -8,6 +8,8 @@ Usage:
     python scripts/sanity_test.py --image2 scripts/test_chart.png  # second image
     python scripts/sanity_test.py --no-proxy               # bypass proxy
     python scripts/sanity_test.py --verbose                 # print full responses
+    python scripts/sanity_test.py --tests 1,5-10,45        # run specific tests only
+    python scripts/sanity_test.py --tests 51-60             # run VL benchmark tests only
 
 Tests (run sequentially to verify prefix cache / session reuse):
   1. text              — simple text question
@@ -20,7 +22,8 @@ Tests (run sequentially to verify prefix cache / session reuse):
   8. nebula            — Automotive.AI-1.7.1 integration patterns
   9. prefix cache      — cache reuse verification
  10. category inputs   — diverse prompt categories (math, code, creative, etc.)
- 11. text              — final text (verify no state corruption)
+ 11. VL benchmark      — diverse VL prompt categories (SimpleVQA, OCR, chart, etc.)
+ 12. text              — final text (verify no state corruption)
 """
 
 from __future__ import annotations
@@ -39,8 +42,26 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_IMAGE = SCRIPT_DIR / "test.jpg"
 DEFAULT_IMAGE2 = SCRIPT_DIR / "test_ocr2.png"
+DEFAULT_CHART_IMAGE = SCRIPT_DIR / "test_chart.png"
+DEFAULT_MATH_IMAGE = SCRIPT_DIR / "test_math.png"
+DEFAULT_TABLE_IMAGE = SCRIPT_DIR / "test_table.png"
 
 # ── Helpers ──────────────────────────────────────────────────────────
+
+def parse_test_selection(spec: str) -> set[int]:
+    """Parse a comma-separated list of test numbers and ranges.
+
+    Examples: "1,5-10,45" -> {1,5,6,7,8,9,10,45}
+    """
+    selected: set[int] = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            selected.update(range(int(lo), int(hi) + 1))
+        else:
+            selected.add(int(part))
+    return selected
 
 def image_to_data_uri(path: Path) -> str:
     data = path.read_bytes()
@@ -271,18 +292,25 @@ GET_TIME_TOOL = {
 }
 
 
-def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tuple[str, bool, str]]:
+def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool,
+              test_filter: set[int] | None = None) -> list[tuple[str, bool, str]]:
     img1_uri = image_to_data_uri(img1)
     img2_uri = image_to_data_uri(img2)
+    chart_uri = image_to_data_uri(DEFAULT_CHART_IMAGE) if DEFAULT_CHART_IMAGE.exists() else img2_uri
+    math_uri = image_to_data_uri(DEFAULT_MATH_IMAGE) if DEFAULT_MATH_IMAGE.exists() else img1_uri
+    table_uri = image_to_data_uri(DEFAULT_TABLE_IMAGE) if DEFAULT_TABLE_IMAGE.exists() else img2_uri
+    ocr_uri = img2_uri  # test_ocr2.png is already img2
     results: list[tuple[str, bool, str]] = []
     test_num = 0
 
     def run(name: str, messages, *, tools=None, max_tokens=256,
             expect_finish="stop", expect_tool_name=None, expect_content_contains=None,
             expect_tool_count=None, expect_prefix_cache_min=None, stream=False,
-            temperature=None, top_p=None):
+            temperature=None, top_p=None, expect_finish_any=False):
         nonlocal test_num
         test_num += 1
+        if test_filter and test_num not in test_filter:
+            return None
         label = f"[{test_num}] {name}"
         print(f"\n{'='*60}")
         print(f"  {label}")
@@ -308,7 +336,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         passed = True
         fail_reasons = []
 
-        if tr.finish_reason != expect_finish:
+        if not expect_finish_any and tr.finish_reason != expect_finish:
             passed = False
             fail_reasons.append(f"finish_reason={tr.finish_reason}, expected={expect_finish}")
         if expect_tool_name:
@@ -754,47 +782,48 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
 
     # 8g: Concurrent requests — Nebula may serve multiple users simultaneously
     test_num += 1
-    label = f"[{test_num}] nebula: concurrent requests (8g)"
-    print(f"\n{'='*60}")
-    print(f"  {label}")
-    print(f"{'='*60}")
-    t0 = time.time()
+    if not test_filter or test_num in test_filter:
+        label = f"[{test_num}] nebula: concurrent requests (8g)"
+        print(f"\n{'='*60}")
+        print(f"  {label}")
+        print(f"{'='*60}")
+        t0 = time.time()
 
-    def _nebula_req(prompt):
-        return chat(base_url,
-                    [{"role": "system", "content": NEBULA_SYSTEM},
-                     {"role": "user", "content": prompt}],
-                    max_tokens=32, temperature=0.7, top_p=0.8)
+        def _nebula_req(prompt):
+            return chat(base_url,
+                        [{"role": "system", "content": NEBULA_SYSTEM},
+                         {"role": "user", "content": prompt}],
+                        max_tokens=32, temperature=0.7, top_p=0.8)
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        f1 = pool.submit(_nebula_req, "1加1等于几？只回答数字。")
-        f2 = pool.submit(_nebula_req, "2加3等于几？只回答数字。")
-        try:
-            r1 = f1.result(timeout=120)
-            r2 = f2.result(timeout=120)
-            elapsed = time.time() - t0
-            c1 = r1["choices"][0]["message"].get("content", "") or ""
-            c2 = r2["choices"][0]["message"].get("content", "") or ""
-            ok1 = r1["choices"][0]["finish_reason"] in ("stop", "length")
-            ok2 = r2["choices"][0]["finish_reason"] in ("stop", "length")
-            passed = ok1 and ok2
-            fail_reasons = []
-            if not ok1:
-                fail_reasons.append(f"req1 finish={r1['choices'][0]['finish_reason']}")
-            if not ok2:
-                fail_reasons.append(f"req2 finish={r2['choices'][0]['finish_reason']}")
-            msg = "PASS" if passed else f"FAIL: {'; '.join(fail_reasons)}"
-            print(f"  response 1    : {c1[:80]}")
-            print(f"  response 2    : {c2[:80]}")
-            print(f"  wall time     : {elapsed:.1f}s")
-            print(f"  result        : {msg}")
-            results.append((label, passed, msg))
-        except Exception as e:
-            elapsed = time.time() - t0
-            msg = f"FAIL: {e}"
-            print(f"  wall time     : {elapsed:.1f}s")
-            print(f"  result        : {msg}")
-            results.append((label, False, msg))
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f1 = pool.submit(_nebula_req, "1加1等于几？只回答数字。")
+            f2 = pool.submit(_nebula_req, "2加3等于几？只回答数字。")
+            try:
+                r1 = f1.result(timeout=120)
+                r2 = f2.result(timeout=120)
+                elapsed = time.time() - t0
+                c1 = r1["choices"][0]["message"].get("content", "") or ""
+                c2 = r2["choices"][0]["message"].get("content", "") or ""
+                ok1 = r1["choices"][0]["finish_reason"] in ("stop", "length")
+                ok2 = r2["choices"][0]["finish_reason"] in ("stop", "length")
+                passed = ok1 and ok2
+                fail_reasons = []
+                if not ok1:
+                    fail_reasons.append(f"req1 finish={r1['choices'][0]['finish_reason']}")
+                if not ok2:
+                    fail_reasons.append(f"req2 finish={r2['choices'][0]['finish_reason']}")
+                msg = "PASS" if passed else f"FAIL: {'; '.join(fail_reasons)}"
+                print(f"  response 1    : {c1[:80]}")
+                print(f"  response 2    : {c2[:80]}")
+                print(f"  wall time     : {elapsed:.1f}s")
+                print(f"  result        : {msg}")
+                results.append((label, passed, msg))
+            except Exception as e:
+                elapsed = time.time() - t0
+                msg = f"FAIL: {e}"
+                print(f"  wall time     : {elapsed:.1f}s")
+                print(f"  result        : {msg}")
+                results.append((label, False, msg))
 
     # ── 10. Prefix cache reuse ──
     # Test that multi-turn conversations reuse KV cache from previous turns.
@@ -884,7 +913,80 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         [{"role": "user", "content": "Summarize in 1-2 sentences: 'Artificial intelligence has transformed industries ranging from healthcare to finance, enabling advanced diagnostics and automated trading. These developments raise debates about job displacement and data privacy.'"}],
         max_tokens=128)
 
-    # ── 12. Final text (verify no state corruption) ──
+    # ── 12. VL benchmark categories ──
+    # Diverse VL prompt categories matching benchmark_dflash_inputs.py
+
+    run("vl-bench: SimpleVQA",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": img1_uri}},
+            {"type": "text", "text": "Answer the following questions about this image: What is the main subject? What is happening? What is the setting or background?"}
+        ]}],
+        max_tokens=256, expect_finish_any=True)
+
+    run("vl-bench: RefCOCO",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": img1_uri}},
+            {"type": "text", "text": "List all distinct objects visible in this image. For each object, describe its approximate location (e.g., top-left, center, bottom-right) and size relative to the image."}
+        ]}],
+        max_tokens=256, expect_finish_any=True)
+
+    run("vl-bench: OCRBench",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": ocr_uri}},
+            {"type": "text", "text": "Extract all text visible in this image. Reproduce the text exactly as it appears, preserving layout and formatting as much as possible."}
+        ]}],
+        max_tokens=256, expect_finish_any=True)
+
+    run("vl-bench: CharXiv_DQ",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": chart_uri}},
+            {"type": "text", "text": "Analyze this chart. What type of chart is it? What are the axes and their labels? What trends or patterns do you observe? Compare the values across categories and identify the key takeaways."}
+        ]}],
+        max_tokens=256, expect_finish_any=True)
+
+    run("vl-bench: ChartMimic",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": chart_uri}},
+            {"type": "text", "text": "Describe the visual layout and structure of this chart in enough detail that someone could recreate it. Include chart type, colors, bar positions, labels, values, legend, and grid lines."}
+        ]}],
+        max_tokens=256, expect_finish_any=True)
+
+    run("vl-bench: MathVision",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": math_uri}},
+            {"type": "text", "text": "Analyze this geometric figure. Identify all shapes, measurements, and labeled points. Calculate the area of the triangle and verify whether the inscribed circle radius is consistent with the given dimensions. Show your work."}
+        ]}],
+        max_tokens=256, expect_finish_any=True)
+
+    run("vl-bench: MathVerse",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": math_uri}},
+            {"type": "text", "text": "Given the geometric figure shown, solve the following: (1) Calculate the perimeter of the triangle. (2) Calculate the area using the base and height. (3) Verify the inscribed circle radius using the formula r = Area / semi-perimeter."}
+        ]}],
+        max_tokens=256, expect_finish_any=True)
+
+    run("vl-bench: Design2Code",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": table_uri}},
+            {"type": "text", "text": "Convert this table image into well-structured markdown. Preserve all columns, rows, alignment, and formatting. Include the title and ensure numerical values are exact."}
+        ]}],
+        max_tokens=256)
+
+    run("vl-bench: Spatial Reasoning",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": img1_uri}},
+            {"type": "text", "text": "Analyze the spatial relationships in this image. What objects are near each other? What is in the foreground vs background? Describe the depth and perspective."}
+        ]}],
+        max_tokens=256, expect_finish_any=True)
+
+    run("vl-bench: MIA-Bench",
+        [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": img1_uri}},
+            {"type": "text", "text": "Describe this image in detail. Include the main subject, background, colors, mood, and any notable details."}
+        ]}],
+        max_tokens=256, expect_finish_any=True)
+
+    # ── 13. Final text (verify no state corruption) ──
     run("text: final check",
         [{"role": "user", "content": "Say hello in Japanese, Chinese, and Korean. Be brief."}],
         max_tokens=64)
@@ -909,6 +1011,9 @@ def main():
                         help="Unset proxy environment variables.")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Print full response content.")
+    parser.add_argument("--tests", type=str, default=None,
+                        help="Comma-separated test numbers/ranges to run (e.g., '1,5-10,51-60').\n"
+                             "Omit to run all tests.")
     args = parser.parse_args()
 
     if args.no_proxy:
@@ -941,8 +1046,12 @@ def main():
         except Exception as e:
             print(f"WARNING: Server health check failed: {e}")
 
+    test_filter = parse_test_selection(args.tests) if args.tests else None
+    if test_filter:
+        print(f"Running selected tests: {sorted(test_filter)}")
+
     t0 = time.time()
-    results = run_tests(base, img1, img2, args.verbose)
+    results = run_tests(base, img1, img2, args.verbose, test_filter=test_filter)
     total_time = time.time() - t0
 
     # Summary
