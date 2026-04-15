@@ -48,6 +48,7 @@ def _print_banner(config: dict[str, object], runtime_dirs: list[Path], log_file:
     lines.append(f"  Warmup Tokens:  {config['warmup_tokens']}")
     lines.append(f"  Logging:        {config['logging']}")
     lines.append(f"  Quant:          {config['quant_mode']} / group_size={config['quant_group_size']}")
+    lines.append(f"  DFlash:         {config['dflash']}")
     lines.append("")
     lines.append(f"  {PATH_VAR}:")
     for path in runtime_dirs:
@@ -192,6 +193,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-temp", type=float, default=0.0, help="Minimum sampling temperature.")
     parser.add_argument("--max-tokens", type=int, default=2048, help="Maximum generated tokens.")
     parser.add_argument("--group-size", type=int, default=128, help="Quantization group size (e.g. 32, 128).")
+    parser.add_argument("--dflash-dir", type=Path, default=None,
+                        help="Path to DFlash draft model directory. Enables speculative decoding.")
     log_group = parser.add_mutually_exclusive_group()
     log_group.add_argument("--log", action="store_true", dest="log",
                            help="Enable stderr logging to ov_serve.log.")
@@ -255,6 +258,18 @@ def main(argv: list[str] | None = None) -> int:
     if not args.log:
         cmd.append("--no-log")
 
+    # DFlash: auto-detect or use explicit path
+    dflash_dir = args.dflash_dir
+    if dflash_dir is None:
+        # Auto-detect: look for *-DFlash directory alongside target model
+        candidate = model.parent / (model.name + "-DFlash")
+        if candidate.is_dir():
+            dflash_dir = candidate
+    if dflash_dir is not None:
+        if not dflash_dir.is_dir():
+            raise SystemExit(f"DFlash draft directory not found: {dflash_dir}")
+        cmd.extend(["--dflash-dir", str(dflash_dir)])
+
     log_file = script_dir / "ov_serve.log" if args.log else None
     banner_text = _print_banner(
         {
@@ -277,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
             "logging": args.log,
             "quant_mode": env.get("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym"),
             "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "128"),
+            "dflash": str(dflash_dir) if dflash_dir else "disabled",
         },
         resolved_runtime_dirs,
         log_file,
