@@ -403,7 +403,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         [{"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": img2_uri}},
             {"type": "image_url", "image_url": {"url": img1_uri}},
-            {"type": "text", "text": "Which image contains a chart? Answer first or second."}
+            {"type": "text", "text": "Which image contains a chart? Answer with one word: first or second."}
         ]}],
         max_tokens=32)
 
