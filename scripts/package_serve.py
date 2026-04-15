@@ -35,11 +35,11 @@ SERVE_EXECUTABLES = frozenset({
 
 RUNTIME_SUFFIXES = (".dll",) if IS_WINDOWS else (".so",)
 TBB_SUFFIXES = (".dll",) if IS_WINDOWS else (".12", ".2")
-PACKAGE_SCRIPT_SUFFIXES = (".ps1",) if IS_WINDOWS else (".py",)
+PACKAGE_SCRIPT_SUFFIXES = (".py",)
 PACKAGE_CLEAN_SUFFIXES = {".dll", ".exe", ".ps1", ".py", ".so", ".12", ".2"}
 TBB_RELATIVE = "openvino/temp/Windows_AMD64/tbb/bin" if IS_WINDOWS else "openvino/temp/Linux_x86_64/tbb/lib"
 TBB_NAMES = frozenset({"tbb12.dll"} if IS_WINDOWS else {"libtbb.so.12", "libtbbmalloc.so.2"})
-LAUNCH_SCRIPT_RELATIVE = "openvino-explicit-modeling/launch_ov_serve.ps1" if IS_WINDOWS else "openvino-explicit-modeling/launch_ov_serve.py"
+LAUNCH_SCRIPT_RELATIVE = "openvino-explicit-modeling/launch_ov_serve.py"
 MODEL_METADATA_FILES = frozenset({
     "chat_template.jinja",
     "config.json",

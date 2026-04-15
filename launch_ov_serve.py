@@ -192,6 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--freq-penalty", type=float, default=0.0, help="Frequency penalty.")
     parser.add_argument("--min-temp", type=float, default=0.0, help="Minimum sampling temperature.")
     parser.add_argument("--max-tokens", type=int, default=2048, help="Maximum generated tokens.")
+    parser.add_argument("--group-size", type=int, default=32, help="Quantization group size (e.g. 32, 128).")
     log_group = parser.add_mutually_exclusive_group()
     log_group.add_argument("--log", action="store_true", dest="log",
                            help="Enable stderr logging to ov_serve.log.")
@@ -215,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     env = os.environ.copy()
     env["OV_GENAI_USE_MODELING_API"] = "1"
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym")
-    env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "32")
+    env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", str(args.group_size))
     resolved_runtime_dirs = _prepend_env_paths(env, PATH_VAR, runtime_dirs)
     _configure_tokenizer_python(env, script_dir, workspace_root)
 
