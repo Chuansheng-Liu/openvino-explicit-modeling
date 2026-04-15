@@ -24,44 +24,48 @@ PATH_SEP = ";" if IS_WINDOWS else ":"
 PYTHONPATH_VAR = "PYTHONPATH"
 
 
-def _print_banner(config: dict[str, object], runtime_dirs: list[Path], log_file: Path | None) -> None:
-    print("═══════════════════════════════════════════════════")
-    print("  ov_serve — Qwen3.5 OpenVINO Inference Server")
-    print("═══════════════════════════════════════════════════")
-    print()
-    print(f"  Launch mode:    {config['launch_mode']}")
-    print(f"  Executable:     {config['exe']}")
-    print(f"  Model:          {config['model']}")
-    print(f"  Device:         {config['device']}")
-    print(f"  Port:           {config['port']}")
-    print(f"  Workers:        {config['workers']}")
-    print(f"  Vision (VL):    {config['vl']}")
-    print(f"  Thinking:       {config['thinking']}")
-    print(f"  Temperature:    {config['temperature']}")
-    print(f"  Top P:          {config['top_p']}")
-    print(f"  Top K:          {config['top_k']}")
-    print(f"  Rep.Penalty:    {config['rep_penalty']}")
-    print(f"  Pres.Penalty:   {config['pres_penalty']}")
-    print(f"  Freq.Penalty:   {config['freq_penalty']}")
-    print(f"  Max Tokens:     {config['max_tokens']}")
-    print(f"  Warmup Tokens:  {config['warmup_tokens']}")
-    print(f"  Logging:        {config['logging']}")
-    print(f"  Quant:          {config['quant_mode']} / group_size={config['quant_group_size']}")
-    print()
-    print(f"  {PATH_VAR}:")
+def _print_banner(config: dict[str, object], runtime_dirs: list[Path], log_file: Path | None) -> str:
+    lines = []
+    lines.append("═══════════════════════════════════════════════════")
+    lines.append("  ov_serve — Qwen3.5 OpenVINO Inference Server")
+    lines.append("═══════════════════════════════════════════════════")
+    lines.append("")
+    lines.append(f"  Launch mode:    {config['launch_mode']}")
+    lines.append(f"  Executable:     {config['exe']}")
+    lines.append(f"  Model:          {config['model']}")
+    lines.append(f"  Device:         {config['device']}")
+    lines.append(f"  Port:           {config['port']}")
+    lines.append(f"  Workers:        {config['workers']}")
+    lines.append(f"  Vision (VL):    {config['vl']}")
+    lines.append(f"  Thinking:       {config['thinking']}")
+    lines.append(f"  Temperature:    {config['temperature']}")
+    lines.append(f"  Top P:          {config['top_p']}")
+    lines.append(f"  Top K:          {config['top_k']}")
+    lines.append(f"  Rep.Penalty:    {config['rep_penalty']}")
+    lines.append(f"  Pres.Penalty:   {config['pres_penalty']}")
+    lines.append(f"  Freq.Penalty:   {config['freq_penalty']}")
+    lines.append(f"  Max Tokens:     {config['max_tokens']}")
+    lines.append(f"  Warmup Tokens:  {config['warmup_tokens']}")
+    lines.append(f"  Logging:        {config['logging']}")
+    lines.append(f"  Quant:          {config['quant_mode']} / group_size={config['quant_group_size']}")
+    lines.append("")
+    lines.append(f"  {PATH_VAR}:")
     for path in runtime_dirs:
         status = "OK" if path.exists() else "MISSING"
-        print(f"    [{status}] {path}")
-    print()
+        lines.append(f"    [{status}] {path}")
+    lines.append("")
     if log_file is not None:
-        print(f"  Log file:       {log_file}")
-        print()
-    print("  Connect:")
-    print(f"    Local Base URL: http://127.0.0.1:{config['port']}/v1")
-    print(f"    LAN Base URL:   http://<server-ip>:{config['port']}/v1")
-    print("    API Key:        any non-empty string")
-    print("    Model:          default")
-    print()
+        lines.append(f"  Log file:       {log_file}")
+        lines.append("")
+    lines.append("  Connect:")
+    lines.append(f"    Local Base URL: http://127.0.0.1:{config['port']}/v1")
+    lines.append(f"    LAN Base URL:   http://<server-ip>:{config['port']}/v1")
+    lines.append("    API Key:        any non-empty string")
+    lines.append("    Model:          default")
+    lines.append("")
+    text = "\n".join(lines) + "\n"
+    print(text, end="")
+    return text
 
 
 def _prepend_env_paths(env: dict[str, str], env_var: str, paths: list[Path]) -> list[Path]:
@@ -104,10 +108,9 @@ def _candidate_model_paths(script_dir: Path, workspace_root: Path) -> list[Path]
     bundled_models_root = script_dir / "models"
     if bundled_models_root.is_dir():
         preferred = [
-            bundled_models_root / "9B",
             bundled_models_root / "Qwen3.5-9B",
-            bundled_models_root / "4B",
             bundled_models_root / "Qwen3.5-4B",
+            bundled_models_root / "Qwen3.5-35B-A3B",
         ]
         for candidate in preferred:
             if candidate not in candidates:
@@ -187,7 +190,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pres-penalty", type=float, default=0.0, help="Presence penalty.")
     parser.add_argument("--freq-penalty", type=float, default=0.0, help="Frequency penalty.")
     parser.add_argument("--min-temp", type=float, default=0.0, help="Minimum sampling temperature.")
-    parser.add_argument("--max-tokens", type=int, default=512, help="Maximum generated tokens.")
+    parser.add_argument("--max-tokens", type=int, default=2048, help="Maximum generated tokens.")
+    parser.add_argument("--group-size", type=int, default=128, help="Quantization group size (e.g. 32, 128).")
     log_group = parser.add_mutually_exclusive_group()
     log_group.add_argument("--log", action="store_true", dest="log",
                            help="Enable stderr logging to ov_serve.log.")
@@ -211,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     env = os.environ.copy()
     env["OV_GENAI_USE_MODELING_API"] = "1"
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym")
-    env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "32")
+    env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", str(args.group_size))
     resolved_runtime_dirs = _prepend_env_paths(env, PATH_VAR, runtime_dirs)
     _configure_tokenizer_python(env, script_dir, workspace_root)
 
@@ -252,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         cmd.append("--no-log")
 
     log_file = script_dir / "ov_serve.log" if args.log else None
-    _print_banner(
+    banner_text = _print_banner(
         {
             "launch_mode": launch_mode,
             "exe": exe,
@@ -272,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
             "warmup_tokens": args.warmup_tokens,
             "logging": args.log,
             "quant_mode": env.get("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym"),
-            "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "32"),
+            "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "128"),
         },
         resolved_runtime_dirs,
         log_file,
@@ -281,8 +285,17 @@ def main(argv: list[str] | None = None) -> int:
     if log_file is None:
         completed = subprocess.run(cmd, env=env, check=False)
     else:
-        with log_file.open("w", encoding="utf-8") as stderr_handle:
-            completed = subprocess.run(cmd, env=env, check=False, stderr=stderr_handle)
+        with log_file.open("w", encoding="utf-8") as log_handle:
+            # Write the banner to the log so the config is recorded.
+            log_handle.write(banner_text)
+            log_handle.flush()
+            # Redirect both stdout and stderr to the log file so that
+            # all output ([ModelLoader], [ov_serve], [GPU] messages)
+            # is captured in a single file.
+            completed = subprocess.run(
+                cmd, env=env, check=False,
+                stdout=log_handle, stderr=subprocess.STDOUT,
+            )
     return completed.returncode
 
 

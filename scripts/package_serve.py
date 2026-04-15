@@ -8,13 +8,14 @@ Usage:
     python scripts\\package_serve.py
     python scripts\\package_serve.py --clean
     python scripts\\package_serve.py --output D:\\deploy\\ov_serve_bundle
-    python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B --model-subdir 9B
+    python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B
 """
 
 from __future__ import annotations
 
 import argparse
 import filecmp
+import os
 import shutil
 import struct
 import subprocess
@@ -35,11 +36,11 @@ SERVE_EXECUTABLES = frozenset({
 
 RUNTIME_SUFFIXES = (".dll",) if IS_WINDOWS else (".so",)
 TBB_SUFFIXES = (".dll",) if IS_WINDOWS else (".12", ".2")
-PACKAGE_SCRIPT_SUFFIXES = (".ps1",) if IS_WINDOWS else (".py",)
+PACKAGE_SCRIPT_SUFFIXES = (".py",)
 PACKAGE_CLEAN_SUFFIXES = {".dll", ".exe", ".ps1", ".py", ".so", ".12", ".2"}
 TBB_RELATIVE = "openvino/temp/Windows_AMD64/tbb/bin" if IS_WINDOWS else "openvino/temp/Linux_x86_64/tbb/lib"
 TBB_NAMES = frozenset({"tbb12.dll"} if IS_WINDOWS else {"libtbb.so.12", "libtbbmalloc.so.2"})
-LAUNCH_SCRIPT_RELATIVE = "openvino-explicit-modeling/launch_ov_serve.ps1" if IS_WINDOWS else "openvino-explicit-modeling/launch_ov_serve.py"
+LAUNCH_SCRIPT_RELATIVE = "openvino-explicit-modeling/launch_ov_serve.py"
 MODEL_METADATA_FILES = frozenset({
     "chat_template.jinja",
     "config.json",
@@ -329,6 +330,106 @@ def copy_file(src: Path, dst_dir: Path, relative_dst: Path) -> tuple[str, int]:
     return "copied", sz
 
 
+# ---------------------------------------------------------------------------
+# IR generation
+# ---------------------------------------------------------------------------
+
+CONVERT_IR_EXE = "convert_ir.exe" if IS_WINDOWS else "convert_ir"
+
+
+def _needs_ir_generation(model_dir: Path, group_size: int | None, vl: bool) -> bool:
+    """Return True if the expected text IR files are missing from model_dir."""
+    gs_tag = f"_g{group_size}" if group_size is not None else ""
+    vl_tag = "_vl" if vl else ""
+    # Look for qwen3_5_text[_vl]_*[_gN].xml
+    for f in model_dir.iterdir():
+        if not f.is_file():
+            continue
+        name = f.name
+        if name.startswith("qwen3_5_text") and name.endswith(".xml"):
+            if vl_tag and vl_tag not in name:
+                continue
+            if gs_tag and gs_tag not in name:
+                continue
+            return False
+    return True
+
+
+def _find_convert_ir(ws: Path, cfg: str) -> Path | None:
+    """Locate convert_ir executable in the build tree."""
+    candidates = [
+        ws / "openvino.genai" / "build" / "bin" / cfg / CONVERT_IR_EXE,
+        ws / "openvino.genai" / "build" / "bin" / CONVERT_IR_EXE,
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
+def _find_runtime_dirs(ws: Path, cfg: str) -> list[Path]:
+    """Return runtime library directories needed for convert_ir."""
+    dirs = []
+    ov_bin = ws / "openvino" / "bin" / "intel64" / cfg
+    if ov_bin.is_dir():
+        dirs.append(ov_bin)
+    tbb_dir = ws / TBB_RELATIVE
+    if tbb_dir.is_dir():
+        dirs.append(tbb_dir)
+    genai_lib = ws / "openvino.genai" / "build" / "openvino_genai"
+    if genai_lib.is_dir():
+        dirs.append(genai_lib)
+    return dirs
+
+
+def generate_ir(ws: Path, cfg: str, model_dir: Path, group_size: int | None,
+                quant_mode: str, vl: bool) -> bool:
+    """Run convert_ir to generate model IR files. Returns True on success."""
+    exe = _find_convert_ir(ws, cfg)
+    if exe is None:
+        log("ERROR", f"convert_ir executable not found in build tree")
+        return False
+
+    cmd = [str(exe), "--model", str(model_dir), "--force"]
+    if vl:
+        cmd.append("--vl")
+
+    env = os.environ.copy()
+    env["OV_GENAI_USE_MODELING_API"] = "1"
+    env["OV_GENAI_INFLIGHT_QUANT_MODE"] = quant_mode
+    if group_size is not None:
+        env["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = str(group_size)
+
+    # Add runtime dirs to PATH/LD_LIBRARY_PATH
+    runtime_dirs = _find_runtime_dirs(ws, cfg)
+    if IS_WINDOWS:
+        path_var = "PATH"
+    else:
+        path_var = "LD_LIBRARY_PATH"
+    existing = env.get(path_var, "")
+    prepend = os.pathsep.join(str(d) for d in runtime_dirs)
+    env[path_var] = prepend + os.pathsep + existing if existing else prepend
+
+    log("INFO", f"Generating IR: {' '.join(cmd)}")
+    log("INFO", f"  quant_mode={quant_mode}, group_size={group_size}")
+    try:
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
+        sys.stdout.write(result.stdout)
+        if result.stderr:
+            sys.stderr.write(result.stderr)
+        if result.returncode != 0:
+            log("ERROR", f"convert_ir failed with exit code {result.returncode}")
+            return False
+        log("INFO", "IR generation completed successfully")
+        return True
+    except subprocess.TimeoutExpired:
+        log("ERROR", "convert_ir timed out (600s)")
+        return False
+    except Exception as e:
+        log("ERROR", f"Failed to run convert_ir: {e}")
+        return False
+
+
 def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: bool,
                         group_size: int | None = None) -> tuple[list[tuple[Path, Path]], list[str]]:
     if not model_dir.exists():
@@ -403,7 +504,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  python scripts\\package_serve.py\n"
             "  python scripts\\package_serve.py --clean\n"
             "  python scripts\\package_serve.py --output D:\\deploy\\serve_bundle\n"
-            "  python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B --model-subdir 9B\n"
+            "  python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B\n"
             "  python scripts\\package_serve.py --include-tokenizer-python\n"
         ),
     )
@@ -414,14 +515,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--build-type", choices=("Release", "RelWithDebInfo"),
                    default="Release", help="Build configuration (default: Release).")
     p.add_argument("--model-dir", type=str, default=None, metavar="DIR",
-                   help="Optional model directory to bundle under models/<name>.")
-    p.add_argument("--model-subdir", type=str, default=None, metavar="NAME",
-                   help="Destination subdirectory name under models/ (default: source directory name).")
+                   help="Optional model directory to bundle under models/<dirname>.")
     p.add_argument("--include-hf-weights", action="store_true",
                    help="Also bundle HuggingFace .safetensors weights. Default is IR-only packaging.")
     p.add_argument("--group-size", type=int, default=32, metavar="N",
                    help="Only package text IR files matching this group size (default: 32).\n"
                         "Set to 0 to include all group sizes.")
+    p.add_argument("--quant-mode", type=str, default="int4_asym",
+                   choices=["int4_sym", "int4_asym", "int8_sym", "int8_asym"],
+                   help="Quantization mode for IR generation (default: int4_asym).")
+    p.add_argument("--no-vl", action="store_true",
+                   help="Skip vision-language IR generation (VL is enabled by default).")
     p.add_argument("--include-tokenizer-python", action="store_true",
                    help="Bundle Python openvino/openvino_tokenizers fallback packages for runtime tokenizer conversion.")
     return p
@@ -456,7 +560,7 @@ def main(argv: list[str] | None = None) -> int:
     log("INFO", f"Tokenizer Python fallback: {'enabled' if args.include_tokenizer_python else 'disabled'}")
 
     model_dir = Path(args.model_dir).resolve() if args.model_dir else None
-    model_subdir = args.model_subdir or (model_dir.name if model_dir else None)
+    model_subdir = model_dir.name if model_dir else None
     group_size = args.group_size if args.group_size != 0 else None
     if model_dir is not None:
         log("INFO", f"Model src : {model_dir}")
@@ -517,6 +621,14 @@ def main(argv: list[str] | None = None) -> int:
                 stats["skipped"] += 1
 
     if model_dir is not None and model_subdir is not None:
+        # Regenerate IR: always when --clean, otherwise only if missing
+        vl = not args.no_vl
+        if args.clean or _needs_ir_generation(model_dir, group_size, vl):
+            reason = "forced by --clean" if args.clean else "text IR not found"
+            log("INFO", f"Generating IR ({reason})...")
+            if not generate_ir(ws, cfg, model_dir, group_size, args.quant_mode, vl):
+                log("ERROR", "IR generation failed, cannot bundle model")
+                return 1
         files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights, group_size)
         if issues:
             for iss in issues:

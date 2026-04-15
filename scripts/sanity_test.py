@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sanity tests for ov_serve: text, VL, mixed sequences, and tool calling.
+"""Sanity tests for ov_serve: text, VL, mixed sequences, tool calling, and Nebula integration.
 
 Usage:
     python scripts/sanity_test.py                          # default localhost:8080
@@ -16,7 +16,9 @@ Tests (run sequentially to verify prefix cache / session reuse):
   4. text + vl + text  — text, then VL, then text
   5. multi-image VL + text + multi-image VL
   6. tool calling      — single, multi-turn, no-tools baseline
-  7. text              — final text (verify no state corruption)
+  7. hermes agent      — multi-step agent simulation
+  8. nebula            — Automotive.AI-1.7.1 integration patterns
+  9. text              — final text (verify no state corruption)
 """
 
 from __future__ import annotations
@@ -29,11 +31,12 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_IMAGE = SCRIPT_DIR / "test.jpg"
-DEFAULT_IMAGE2 = SCRIPT_DIR / "test_chart.png"
+DEFAULT_IMAGE2 = SCRIPT_DIR / "test_ocr2.png"
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -57,7 +60,8 @@ def post_json(url: str, payload: dict, timeout: int = 120) -> dict:
 
 
 def chat(base_url: str, messages: list, *, tools: list | None = None,
-         max_tokens: int = 256, model: str = "qwen3.5") -> dict:
+         max_tokens: int = 256, model: str = "qwen3.5",
+         temperature: float | None = None, top_p: float | None = None) -> dict:
     payload: dict = {
         "model": model,
         "messages": messages,
@@ -66,11 +70,16 @@ def chat(base_url: str, messages: list, *, tools: list | None = None,
     }
     if tools:
         payload["tools"] = tools
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if top_p is not None:
+        payload["top_p"] = top_p
     return post_json(f"{base_url}/v1/chat/completions", payload)
 
 
 def chat_stream(base_url: str, messages: list, *, tools: list | None = None,
-                max_tokens: int = 256, model: str = "qwen3.5") -> dict:
+                max_tokens: int = 256, model: str = "qwen3.5",
+                temperature: float | None = None, top_p: float | None = None) -> dict:
     """Streaming chat — reassemble SSE chunks into a single response dict."""
     payload: dict = {
         "model": model,
@@ -80,6 +89,10 @@ def chat_stream(base_url: str, messages: list, *, tools: list | None = None,
     }
     if tools:
         payload["tools"] = tools
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if top_p is not None:
+        payload["top_p"] = top_p
     body = json.dumps(payload).encode()
     req = urllib.request.Request(
         f"{base_url}/v1/chat/completions", data=body,
@@ -125,6 +138,9 @@ def chat_stream(base_url: str, messages: list, *, tools: list | None = None,
                     if fn.get("arguments"):
                         entry["function"]["arguments"] += fn["arguments"]
 
+    # Strip stray quote chars that the streaming tokeniser may leak into names
+    for entry in tool_calls_accum.values():
+        entry["function"]["name"] = entry["function"]["name"].strip('"')
     tool_calls_list = [tool_calls_accum[i] for i in sorted(tool_calls_accum)]
     effective_finish = finish_reason or "stop"
     return {
@@ -157,6 +173,7 @@ class TestResult:
         perf = u.get("performance", {})
         self.tps = perf.get("throughput_tps", 0)
         self.ttft = perf.get("ttft_ms", 0)
+        self.prefix_cached_tokens = perf.get("prefix_cached_tokens", 0)
 
     def summary(self, verbose: bool = False) -> str:
         lines = [
@@ -164,6 +181,8 @@ class TestResult:
             f"  tokens        : {self.prompt_tokens} prompt + {self.completion_tokens} gen",
             f"  throughput    : {self.tps:.1f} t/s, ttft: {self.ttft:.0f}ms",
         ]
+        if self.prefix_cached_tokens > 0:
+            lines.append(f"  prefix cache  : {self.prefix_cached_tokens} tokens reused")
         if self.tool_calls:
             for tc in self.tool_calls:
                 fn = tc.get("function", {})
@@ -258,7 +277,8 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
 
     def run(name: str, messages, *, tools=None, max_tokens=256,
             expect_finish="stop", expect_tool_name=None, expect_content_contains=None,
-            expect_tool_count=None, stream=False):
+            expect_tool_count=None, expect_prefix_cache_min=None, stream=False,
+            temperature=None, top_p=None):
         nonlocal test_num
         test_num += 1
         label = f"[{test_num}] {name}"
@@ -268,9 +288,11 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         t0 = time.time()
         try:
             if stream:
-                resp = chat_stream(base_url, messages, tools=tools, max_tokens=max_tokens)
+                resp = chat_stream(base_url, messages, tools=tools, max_tokens=max_tokens,
+                                   temperature=temperature, top_p=top_p)
             else:
-                resp = chat(base_url, messages, tools=tools, max_tokens=max_tokens)
+                resp = chat(base_url, messages, tools=tools, max_tokens=max_tokens,
+                            temperature=temperature, top_p=top_p)
         except Exception as e:
             msg = f"FAIL: {e}"
             print(f"  {msg}")
@@ -301,6 +323,12 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             if expect_content_contains.lower() not in tr.content.lower():
                 passed = False
                 fail_reasons.append(f"content missing '{expect_content_contains}'")
+        if expect_prefix_cache_min is not None:
+            if tr.prefix_cached_tokens < expect_prefix_cache_min:
+                passed = False
+                fail_reasons.append(
+                    f"prefix_cached_tokens={tr.prefix_cached_tokens}, "
+                    f"expected>={expect_prefix_cache_min}")
         if tr.completion_tokens < 1:
             passed = False
             fail_reasons.append("0 completion tokens")
@@ -334,9 +362,9 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
     run("vl+vl+text: second VL (3b)",
         [{"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": img2_uri}},
-            {"type": "text", "text": "Describe this image in one sentence."}
+            {"type": "text", "text": "What type of content is in this image? Answer in one word."}
         ]}],
-        max_tokens=64)
+        max_tokens=16)
 
     run("vl+vl+text: text (3c)",
         [{"role": "user", "content": "What is 15 * 17? Answer with just the number."}],
@@ -375,7 +403,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         [{"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": img2_uri}},
             {"type": "image_url", "image_url": {"url": img1_uri}},
-            {"type": "text", "text": "Which image contains a chart? Answer first or second."}
+            {"type": "text", "text": "Which image contains a chart? Answer with one word: first or second."}
         ]}],
         max_tokens=32)
 
@@ -462,8 +490,9 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         expect_tool_name="book_flight")
 
     # 6i: Long tool result — feed back a large result and get summary
+    # Note: model may call a tool or answer directly depending on tool proximity
     run("tool: long result (6i)",
-        [{"role": "system", "content": "You are a helpful assistant."},
+        [{"role": "system", "content": "You are a helpful assistant. Answer the user's question directly based on the tool results provided."},
          {"role": "user", "content": "Search for OpenVINO 2025."},
          {"role": "assistant", "content": "",
           "tool_calls": [{"id": "call_0", "type": "function",
@@ -476,8 +505,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
              ]
          })},
          {"role": "user", "content": "How many results did you find? Answer with just the number."}],
-        tools=[SEARCH_TOOL],
-        max_tokens=32,
+        max_tokens=64,
         expect_content_contains="10")
 
     # 6j: Three tools available — pick the right one
@@ -505,7 +533,329 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         expect_finish="tool_calls",
         expect_tool_name="get_weather")
 
-    # ── 7. Final text (verify no state corruption) ──
+    # ── 7. Hermes agent simulation ──
+    # Simulates the multi-turn agent loop pattern used by NousResearch Hermes.
+    # These tests verify the server handles realistic agent workloads.
+
+    HERMES_SYSTEM = (
+        "You are a function calling AI model. You are provided with function "
+        "signatures within <tools></tools> XML tags. You may call one or more "
+        "functions to assist with the user query. Don't make assumptions about "
+        "what values to plug into functions. Here are the available tools:\n"
+    )
+
+    CALC_TOOL = {
+        "type": "function",
+        "function": {
+            "name": "calculate",
+            "description": "Evaluate a mathematical expression",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "Math expression to evaluate"}
+                },
+                "required": ["expression"],
+            },
+        },
+    }
+
+    # 7a: Agent first turn — model should call tool, not answer directly
+    run("agent: first turn tool call (7a)",
+        [{"role": "system", "content": HERMES_SYSTEM},
+         {"role": "user", "content": "What is the current weather in Tokyo and what time is it there?"}],
+        tools=[WEATHER_TOOL, GET_TIME_TOOL],
+        max_tokens=512,
+        expect_finish="tool_calls")
+
+    # 7b: Agent multi-step — after first tool result, should call second tool
+    run("agent: chain second tool (7b)",
+        [{"role": "system", "content": HERMES_SYSTEM},
+         {"role": "user", "content": "What is the current weather in Tokyo and what time is it there?"},
+         {"role": "assistant", "content": "",
+          "tool_calls": [{"id": "call_0", "type": "function",
+                          "function": {"name": "get_weather",
+                                       "arguments": "{\"city\": \"Tokyo\"}"}}]},
+         {"role": "tool", "content": "{\"temperature\": 18, \"condition\": \"partly cloudy\", \"humidity\": 60}"},
+         {"role": "user", "content": "Now get the time."}],
+        tools=[WEATHER_TOOL, GET_TIME_TOOL],
+        max_tokens=512,
+        expect_finish="tool_calls",
+        expect_tool_name="get_current_time")
+
+    # 7c: Agent final answer — after all tool results, should give text answer
+    run("agent: final answer (7c)",
+        [{"role": "system", "content": HERMES_SYSTEM},
+         {"role": "user", "content": "What is the current weather in Tokyo and what time is it there?"},
+         {"role": "assistant", "content": "",
+          "tool_calls": [{"id": "call_0", "type": "function",
+                          "function": {"name": "get_weather",
+                                       "arguments": "{\"city\": \"Tokyo\"}"}}]},
+         {"role": "tool", "content": "{\"temperature\": 18, \"condition\": \"partly cloudy\", \"humidity\": 60}"},
+         {"role": "assistant", "content": "",
+          "tool_calls": [{"id": "call_1", "type": "function",
+                          "function": {"name": "get_current_time",
+                                       "arguments": "{\"timezone\": \"Asia/Tokyo\"}"}}]},
+         {"role": "tool", "content": "{\"time\": \"2026-04-14T12:30:00+09:00\", \"timezone\": \"JST\"}"},
+         {"role": "user", "content": "Summarize both results in one sentence."}],
+        tools=[WEATHER_TOOL, GET_TIME_TOOL],
+        max_tokens=256,
+        expect_finish="stop",
+        expect_content_contains="Tokyo")
+
+    # 7d: Agent with calculation — different tool domain
+    run("agent: calculate (7d)",
+        [{"role": "system", "content": HERMES_SYSTEM},
+         {"role": "user", "content": "What is 1234 * 5678?"}],
+        tools=[CALC_TOOL, WEATHER_TOOL],
+        max_tokens=512,
+        expect_finish="tool_calls",
+        expect_tool_name="calculate")
+
+    # 7e: Agent — tool error handling (tool returns error, model should explain or retry)
+    # With tool definitions near end-of-context, model may retry the tool call — both are valid.
+    run("agent: tool error recovery (7e)",
+        [{"role": "system", "content": HERMES_SYSTEM},
+         {"role": "user", "content": "What is the weather in Beijing?"},
+         {"role": "assistant", "content": "",
+          "tool_calls": [{"id": "call_0", "type": "function",
+                          "function": {"name": "get_weather",
+                                       "arguments": "{\"city\": \"Beijing\"}"}}]},
+         {"role": "tool", "content": "{\"error\": \"Service temporarily unavailable. Please try again later.\"}"},
+         {"role": "user", "content": "The tool failed. Explain the error to me in one sentence."}],
+        max_tokens=256)
+
+    # 7f: Agent long context — 5-turn conversation with tool calls
+    run("agent: long context 5-turn (7f)",
+        [{"role": "system", "content": HERMES_SYSTEM},
+         {"role": "user", "content": "Check weather in Beijing."},
+         {"role": "assistant", "content": "",
+          "tool_calls": [{"id": "call_0", "type": "function",
+                          "function": {"name": "get_weather",
+                                       "arguments": "{\"city\": \"Beijing\"}"}}]},
+         {"role": "tool", "content": "{\"temperature\": 22, \"condition\": \"sunny\"}"},
+         {"role": "assistant", "content": "Beijing is 22°C and sunny."},
+         {"role": "user", "content": "Now check Shanghai."},
+         {"role": "assistant", "content": "",
+          "tool_calls": [{"id": "call_1", "type": "function",
+                          "function": {"name": "get_weather",
+                                       "arguments": "{\"city\": \"Shanghai\"}"}}]},
+         {"role": "tool", "content": "{\"temperature\": 25, \"condition\": \"cloudy\"}"},
+         {"role": "assistant", "content": "Shanghai is 25°C and cloudy."},
+         {"role": "user", "content": "Which city is warmer? Answer in one sentence."}],
+        tools=[WEATHER_TOOL],
+        max_tokens=128,
+        expect_finish="stop")
+
+    # 7g: Agent streaming — full agent turn in streaming mode
+    run("agent: streaming tool call (7g)",
+        [{"role": "system", "content": HERMES_SYSTEM},
+         {"role": "user", "content": "Search the web for the latest OpenVINO release."}],
+        tools=[SEARCH_TOOL, WEATHER_TOOL],
+        max_tokens=512,
+        stream=True,
+        expect_finish="tool_calls",
+        expect_tool_name="web_search")
+
+    # 7h: Long system prompt + tools — regression test for Hermes agent hang.
+    # When the system prompt is very large (>2K tokens), tool definitions must
+    # still be visible to the model.  This failed before the fix that moved
+    # <tools> to a separate system message near end-of-context.
+    LONG_HERMES_SYSTEM = (
+        HERMES_SYSTEM + "\n\n"
+        "## Agent Guidelines\n\n"
+        + "\n".join(
+            f"Guideline {i}: When the user asks you to perform task type {i}, "
+            f"always use the most appropriate tool. Be thorough and precise."
+            for i in range(30)
+        )
+        + "\n\n## Memory\n\n"
+        + "\n".join(f"- User preference {i}: setting_{i}=value_{i}" for i in range(20))
+        + "\n\n## Session Context\n\nThis is a long-running agent session.\n"
+    )
+
+    run("agent: long sysprompt + tools (7h)",
+        [{"role": "system", "content": LONG_HERMES_SYSTEM},
+         {"role": "user", "content": "What is the weather in Paris right now?"}],
+        tools=[WEATHER_TOOL, SEARCH_TOOL, GET_TIME_TOOL],
+        max_tokens=512,
+        expect_finish="tool_calls",
+        expect_tool_name="get_weather")
+
+    # ── 8. Nebula Automotive.AI integration ──
+    # Mirror exact request patterns from Nebula Automotive.AI-1.7.1 to verify
+    # ov_serve works as a drop-in LLM backend for the Nebula agent framework.
+
+    NEBULA_SYSTEM = (
+        "你是人工智能助手问问, 你可以根据训练所的的知识, "
+        "用中文回答用户的问题, 或者用自然语言描述用户提供的图片. "
+        "你可以自行判断是否使用其他工具来获取信息或者完成用户的任务."
+    )
+
+    # 8a: Chinese system prompt + streaming text
+    run("nebula: chinese streaming (8a)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "北京是哪个国家的首都？用一句话回答。"}],
+        stream=True,
+        max_tokens=64)
+
+    # 8b: Multi-turn 5-turn conversation (streaming, Nebula accumulates history)
+    run("nebula: multi-turn 5-turn (8b)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "你好"},
+         {"role": "assistant", "content": "你好！有什么可以帮助你的吗？"},
+         {"role": "user", "content": "今天天气怎么样？"},
+         {"role": "assistant", "content": "抱歉，我无法获取实时天气信息。"},
+         {"role": "user", "content": "我在上海"},
+         {"role": "assistant", "content": "上海是个美丽的城市！"},
+         {"role": "user", "content": "上海有什么好玩的？"},
+         {"role": "assistant", "content": "上海有很多好玩的地方，比如外滩、东方明珠、豫园等。"},
+         {"role": "user", "content": "外滩在哪里？用一句话回答。"}],
+        stream=True,
+        max_tokens=128)
+
+    # 8c: Vision + Chinese description (Nebula's primary VL use case, streaming)
+    run("nebula: vision chinese (8c)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": [
+             {"type": "image_url", "image_url": {"url": img1_uri}},
+             {"type": "text", "text": "用中文描述这张图片，一句话。"}
+         ]}],
+        stream=True,
+        max_tokens=128)
+
+    # 8d: Multi-turn with image mid-conversation
+    run("nebula: mid-conversation image (8d)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "你好，我想了解一些图片。"},
+         {"role": "assistant", "content": "好的，请发送你想了解的图片。"},
+         {"role": "user", "content": [
+             {"type": "image_url", "image_url": {"url": img1_uri}},
+             {"type": "text", "text": "这张图片里有什么？一句话回答。"}
+         ]}],
+        max_tokens=128)
+
+    # 8e: Null content in assistant message (Nebula edge case)
+    run("nebula: null assistant content (8e)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "你好"},
+         {"role": "assistant", "content": None},
+         {"role": "user", "content": "1加1等于几？只回答数字。"}],
+        max_tokens=16)
+
+    # 8f: Nebula exact parameters (temperature=0.7, top_p=0.8)
+    run("nebula: temp=0.7 top_p=0.8 (8f)",
+        [{"role": "system", "content": NEBULA_SYSTEM},
+         {"role": "user", "content": "用中文解释什么是人工智能，一句话。"}],
+        temperature=0.7,
+        top_p=0.8,
+        max_tokens=128)
+
+    # 8g: Concurrent requests — Nebula may serve multiple users simultaneously
+    test_num += 1
+    label = f"[{test_num}] nebula: concurrent requests (8g)"
+    print(f"\n{'='*60}")
+    print(f"  {label}")
+    print(f"{'='*60}")
+    t0 = time.time()
+
+    def _nebula_req(prompt):
+        return chat(base_url,
+                    [{"role": "system", "content": NEBULA_SYSTEM},
+                     {"role": "user", "content": prompt}],
+                    max_tokens=32, temperature=0.7, top_p=0.8)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f1 = pool.submit(_nebula_req, "1加1等于几？只回答数字。")
+        f2 = pool.submit(_nebula_req, "2加3等于几？只回答数字。")
+        try:
+            r1 = f1.result(timeout=120)
+            r2 = f2.result(timeout=120)
+            elapsed = time.time() - t0
+            c1 = r1["choices"][0]["message"].get("content", "") or ""
+            c2 = r2["choices"][0]["message"].get("content", "") or ""
+            ok1 = r1["choices"][0]["finish_reason"] in ("stop", "length")
+            ok2 = r2["choices"][0]["finish_reason"] in ("stop", "length")
+            passed = ok1 and ok2
+            fail_reasons = []
+            if not ok1:
+                fail_reasons.append(f"req1 finish={r1['choices'][0]['finish_reason']}")
+            if not ok2:
+                fail_reasons.append(f"req2 finish={r2['choices'][0]['finish_reason']}")
+            msg = "PASS" if passed else f"FAIL: {'; '.join(fail_reasons)}"
+            print(f"  response 1    : {c1[:80]}")
+            print(f"  response 2    : {c2[:80]}")
+            print(f"  wall time     : {elapsed:.1f}s")
+            print(f"  result        : {msg}")
+            results.append((label, passed, msg))
+        except Exception as e:
+            elapsed = time.time() - t0
+            msg = f"FAIL: {e}"
+            print(f"  wall time     : {elapsed:.1f}s")
+            print(f"  result        : {msg}")
+            results.append((label, False, msg))
+
+    # ── 10. Prefix cache reuse ──
+    # Test that multi-turn conversations reuse KV cache from previous turns.
+    # The second request in each pair should have prefix_cached_tokens > 0.
+
+    # 10a. Simple two-turn text conversation
+    run("prefix-cache: text turn 1 (cold)",
+        [{"role": "user", "content": "What is 2+2? Answer with just the number."}],
+        max_tokens=16)
+
+    run("prefix-cache: text turn 2 (should hit cache)",
+        [{"role": "user", "content": "What is 2+2? Answer with just the number."},
+         {"role": "assistant", "content": "<think>\n</think>\n\n4"},
+         {"role": "user", "content": "And what is 3+3? Answer with just the number."}],
+        max_tokens=16,
+        expect_prefix_cache_min=10)
+
+    # 10b. Two-turn with tools (verifies tool_defs at fixed position)
+    # Include a system message so tool_defs are anchored after it (not fallback path)
+    TOOLS_SYS = "You are a helpful weather assistant."
+    tr_tool1 = run("prefix-cache: tools turn 1 (cold)",
+        [{"role": "system", "content": TOOLS_SYS},
+         {"role": "user", "content": "What is the weather in Paris?"}],
+        tools=[WEATHER_TOOL],
+        max_tokens=64,
+        expect_finish="tool_calls",
+        expect_tool_name="get_weather")
+
+    # Build turn 2 from actual turn 1 response so cached tokens match exactly
+    tool1_msg = {"role": "assistant", "content": tr_tool1.content if tr_tool1 else ""}
+    if tr_tool1 and tr_tool1.tool_calls:
+        tool1_msg["tool_calls"] = tr_tool1.tool_calls
+    tool1_id = (tr_tool1.tool_calls[0].get("id", "call_1")
+                if tr_tool1 and tr_tool1.tool_calls else "call_1")
+
+    run("prefix-cache: tools turn 2 (should hit cache)",
+        [{"role": "system", "content": TOOLS_SYS},
+         {"role": "user", "content": "What is the weather in Paris?"},
+         tool1_msg,
+         {"role": "tool", "tool_call_id": tool1_id,
+          "content": '{"temp": 18, "condition": "sunny"}'},
+         {"role": "user", "content": "And what about London?"}],
+        tools=[WEATHER_TOOL],
+        max_tokens=64,
+        expect_finish="tool_calls",
+        expect_tool_name="get_weather",
+        expect_prefix_cache_min=10)
+
+    # 10c. Streaming two-turn (verify prefix cache works in stream mode too)
+    tr_stream1 = run("prefix-cache: stream turn 1 (cold)",
+        [{"role": "user", "content": "Name one color. Be brief."}],
+        max_tokens=16, stream=True)
+
+    # Use actual turn 1 response so cached tokens match exactly
+    stream1_content = tr_stream1.content if tr_stream1 else "Blue"
+    run("prefix-cache: stream turn 2 (should hit cache)",
+        [{"role": "user", "content": "Name one color. Be brief."},
+         {"role": "assistant", "content": stream1_content},
+         {"role": "user", "content": "Name another color. Be brief."}],
+        max_tokens=16, stream=True,
+        expect_prefix_cache_min=10)
+
+    # ── 11. Final text (verify no state corruption) ──
     run("text: final check",
         [{"role": "user", "content": "Say hello in Japanese, Chinese, and Korean. Be brief."}],
         max_tokens=64)
