@@ -434,7 +434,8 @@ def generate_ir(ws: Path, cfg: str, model_dir: Path, group_size: int | None,
 
 def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: bool,
                         group_size: int | None = None,
-                        dflash_dir: Path | None = None) -> tuple[list[tuple[Path, Path]], list[str]]:
+                        dflash_dir: Path | None = None,
+                        quant_mode: str | None = None) -> tuple[list[tuple[Path, Path]], list[str]]:
     if not model_dir.exists():
         return [], [f"Model directory not found: {model_dir}"]
     if not model_dir.is_dir():
@@ -443,7 +444,14 @@ def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: 
     # Build group-size tag for filtering IR files (e.g. "_g128.")
     gs_tag = f"_g{group_size}." if group_size is not None else None
 
-    # IR prefixes that should be filtered by group size
+    # Build quant-mode tag for filtering IR files (e.g. "_q4a_" for int4_asym)
+    _QUANT_TAG_MAP = {
+        "int4_sym": "_q4s_", "int4_asym": "_q4a_",
+        "int8_sym": "_q8s_", "int8_asym": "_q8a_",
+    }
+    quant_tag = _QUANT_TAG_MAP.get(quant_mode) if quant_mode else None
+
+    # IR prefixes that should be filtered by group size and quant mode
     _GS_FILTERED_PREFIXES = ("qwen3_5_text", "qwen3_5_dflash_target", "qwen3_5_dflash_combined_draft")
     # context_fc is always FP16 (no group-size suffix) — not filtered
 
@@ -451,12 +459,15 @@ def collect_model_files(model_dir: Path, model_subdir: str, include_hf_weights: 
     for file_path in sorted(model_dir.iterdir()):
         if not file_path.is_file():
             continue
-        # Filter IR files by group size when specified
+        # Filter IR files by group size and quant mode when specified
         if file_path.suffix.lower() in {".xml", ".bin"}:
             stem = file_path.stem + file_path.suffix  # full filename
-            if gs_tag is not None and any(file_path.name.startswith(p) for p in _GS_FILTERED_PREFIXES):
-                if gs_tag not in stem:
+            if any(file_path.name.startswith(p) for p in _GS_FILTERED_PREFIXES):
+                if gs_tag is not None and gs_tag not in stem:
                     log("SKIP", f"{file_path.name} (group_size != {group_size})")
+                    continue
+                if quant_tag is not None and quant_tag not in file_path.name:
+                    log("SKIP", f"{file_path.name} (quant_mode != {quant_mode})")
                     continue
             matched.append((file_path, Path("models") / model_subdir / file_path.name))
         elif (
@@ -642,7 +653,7 @@ def main(argv: list[str] | None = None) -> int:
                 log("ERROR", "IR generation failed, cannot bundle model")
                 return 1
         files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights,
-                                            group_size, dflash_dir)
+                                            group_size, dflash_dir, args.quant_mode)
         if issues:
             for iss in issues:
                 log("ERROR", iss)
