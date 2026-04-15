@@ -108,10 +108,9 @@ def _candidate_model_paths(script_dir: Path, workspace_root: Path) -> list[Path]
     bundled_models_root = script_dir / "models"
     if bundled_models_root.is_dir():
         preferred = [
-            bundled_models_root / "9B",
             bundled_models_root / "Qwen3.5-9B",
-            bundled_models_root / "4B",
             bundled_models_root / "Qwen3.5-4B",
+            bundled_models_root / "Qwen3.5-35B-A3B",
         ]
         for candidate in preferred:
             if candidate not in candidates:

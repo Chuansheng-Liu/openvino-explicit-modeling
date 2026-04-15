@@ -8,7 +8,7 @@ Usage:
     python scripts\\package_serve.py
     python scripts\\package_serve.py --clean
     python scripts\\package_serve.py --output D:\\deploy\\ov_serve_bundle
-    python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B --model-subdir 9B
+    python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B
 """
 
 from __future__ import annotations
@@ -504,7 +504,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  python scripts\\package_serve.py\n"
             "  python scripts\\package_serve.py --clean\n"
             "  python scripts\\package_serve.py --output D:\\deploy\\serve_bundle\n"
-            "  python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B --model-subdir 9B\n"
+            "  python scripts\\package_serve.py --model-dir /models/Qwen3.5-9B\n"
             "  python scripts\\package_serve.py --include-tokenizer-python\n"
         ),
     )
@@ -515,9 +515,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--build-type", choices=("Release", "RelWithDebInfo"),
                    default="Release", help="Build configuration (default: Release).")
     p.add_argument("--model-dir", type=str, default=None, metavar="DIR",
-                   help="Optional model directory to bundle under models/<name>.")
-    p.add_argument("--model-subdir", type=str, default=None, metavar="NAME",
-                   help="Destination subdirectory name under models/ (default: source directory name).")
+                   help="Optional model directory to bundle under models/<dirname>.")
     p.add_argument("--include-hf-weights", action="store_true",
                    help="Also bundle HuggingFace .safetensors weights. Default is IR-only packaging.")
     p.add_argument("--group-size", type=int, default=128, metavar="N",
@@ -562,7 +560,7 @@ def main(argv: list[str] | None = None) -> int:
     log("INFO", f"Tokenizer Python fallback: {'enabled' if args.include_tokenizer_python else 'disabled'}")
 
     model_dir = Path(args.model_dir).resolve() if args.model_dir else None
-    model_subdir = args.model_subdir or (model_dir.name if model_dir else None)
+    model_subdir = model_dir.name if model_dir else None
     group_size = args.group_size if args.group_size != 0 else None
     if model_dir is not None:
         log("INFO", f"Model src : {model_dir}")
