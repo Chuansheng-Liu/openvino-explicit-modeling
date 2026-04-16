@@ -383,7 +383,7 @@ def _find_runtime_dirs(ws: Path, cfg: str) -> list[Path]:
 
 
 def generate_ir(ws: Path, cfg: str, model_dir: Path, group_size: int | None,
-                quant_mode: str, vl: bool) -> bool:
+                quant_mode: str, backup_mode: str, vl: bool) -> bool:
     """Run convert_ir to generate model IR files. Returns True on success."""
     exe = _find_convert_ir(ws, cfg)
     if exe is None:
@@ -399,6 +399,7 @@ def generate_ir(ws: Path, cfg: str, model_dir: Path, group_size: int | None,
     env["OV_GENAI_INFLIGHT_QUANT_MODE"] = quant_mode
     if group_size is not None:
         env["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = str(group_size)
+    env["OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE"] = backup_mode
 
     # Add runtime dirs to PATH/LD_LIBRARY_PATH
     runtime_dirs = _find_runtime_dirs(ws, cfg)
@@ -411,7 +412,7 @@ def generate_ir(ws: Path, cfg: str, model_dir: Path, group_size: int | None,
     env[path_var] = prepend + os.pathsep + existing if existing else prepend
 
     log("INFO", f"Generating IR: {' '.join(cmd)}")
-    log("INFO", f"  quant_mode={quant_mode}, group_size={group_size}")
+    log("INFO", f"  quant_mode={quant_mode}, backup_mode={backup_mode}, group_size={group_size}")
     try:
         result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
         sys.stdout.write(result.stdout)
@@ -524,6 +525,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--quant-mode", type=str, default="int4_asym",
                    choices=["int4_sym", "int4_asym", "int8_sym", "int8_asym"],
                    help="Quantization mode for IR generation (default: int4_asym).")
+    p.add_argument("--backup-mode", type=str, default="int4_sym",
+                   choices=["int4_sym", "int4_asym", "int8_sym", "int8_asym"],
+                   help="Backup quantization mode (default: int4_sym).")
     p.add_argument("--no-vl", action="store_true",
                    help="Skip vision-language IR generation (VL is enabled by default).")
     p.add_argument("--include-tokenizer-python", action="store_true",
@@ -626,7 +630,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.clean or _needs_ir_generation(model_dir, group_size, vl):
             reason = "forced by --clean" if args.clean else "text IR not found"
             log("INFO", f"Generating IR ({reason})...")
-            if not generate_ir(ws, cfg, model_dir, group_size, args.quant_mode, vl):
+            if not generate_ir(ws, cfg, model_dir, group_size, args.quant_mode, args.backup_mode, vl):
                 log("ERROR", "IR generation failed, cannot bundle model")
                 return 1
         files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights, group_size)

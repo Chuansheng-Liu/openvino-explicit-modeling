@@ -47,7 +47,7 @@ def _print_banner(config: dict[str, object], runtime_dirs: list[Path], log_file:
     lines.append(f"  Max Tokens:     {config['max_tokens']}")
     lines.append(f"  Warmup Tokens:  {config['warmup_tokens']}")
     lines.append(f"  Logging:        {config['logging']}")
-    lines.append(f"  Quant:          {config['quant_mode']} / group_size={config['quant_group_size']}")
+    lines.append(f"  Quant:          {config['quant_mode']} / group_size={config['quant_group_size']} / backup={config['quant_backup_mode']}")
     lines.append("")
     lines.append(f"  {PATH_VAR}:")
     for path in runtime_dirs:
@@ -216,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     env["OV_GENAI_USE_MODELING_API"] = "1"
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym")
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", str(args.group_size))
+    env.setdefault("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", "int4_sym")
     resolved_runtime_dirs = _prepend_env_paths(env, PATH_VAR, runtime_dirs)
     _configure_tokenizer_python(env, script_dir, workspace_root)
 
@@ -277,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
             "logging": args.log,
             "quant_mode": env.get("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym"),
             "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "128"),
+            "quant_backup_mode": env.get("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", "int4_sym"),
         },
         resolved_runtime_dirs,
         log_file,
