@@ -855,7 +855,52 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         max_tokens=16, stream=True,
         expect_prefix_cache_min=10)
 
-    # ── 11. Final text (verify no state corruption) ──
+    # ── 11. 10-turn mixed text+VL prefix cache stress test ──
+    # Each turn uses the actual model response to build the next request,
+    # ensuring the prefix cache can match exactly.  Turns alternate between
+    # text-only and VL (image) to verify cache behaviour across modalities.
+    TURN_PROMPTS = [
+        # (user_content, is_vl, label)
+        ("What is the capital of Japan? One word.", False, "text-t1"),
+        ([{"type": "image_url", "image_url": {"url": img1_uri}},
+          {"type": "text", "text": "Describe this image in one sentence."}], True, "vl-t2"),
+        ("What language is most spoken there? One word.", False, "text-t3"),
+        ([{"type": "image_url", "image_url": {"url": img2_uri}},
+          {"type": "text", "text": "What is in this image? Answer with one word."}], True, "vl-t4"),
+        ("Name a famous dish from Japan. One word.", False, "text-t5"),
+        ("What continent is Japan in? One word.", False, "text-t6"),
+        ([{"type": "image_url", "image_url": {"url": img1_uri}},
+          {"type": "text", "text": "Is there any text in this image? Yes or no."}], True, "vl-t7"),
+        ("What is 100 + 200? Just the number.", False, "text-t8"),
+        ("Name one ocean near Japan. Be brief.", False, "text-t9"),
+        ("Say goodbye in Japanese. One word.", False, "text-t10"),
+    ]
+
+    messages_so_far = [{"role": "system", "content": "You are a helpful assistant. Be very brief."}]
+    for i, (prompt, is_vl, label) in enumerate(TURN_PROMPTS):
+        turn_num = i + 1
+        user_msg = {"role": "user", "content": prompt}
+        messages_so_far.append(user_msg)
+
+        # VL requests currently reset cache (different code path), so only
+        # expect cache hits on text turns after another text turn.
+        expect_cache = None
+        if turn_num > 1 and not is_vl:
+            # Check if previous turn was also text (not VL) — VL resets cache
+            prev_is_vl = TURN_PROMPTS[i - 1][1]
+            if not prev_is_vl:
+                expect_cache = 10
+
+        tr = run(f"10-turn: {label} (turn {turn_num})",
+                 list(messages_so_far),  # copy so mutations don't affect
+                 max_tokens=32,
+                 expect_prefix_cache_min=expect_cache)
+
+        # Append actual model response for next turn
+        resp_content = tr.content if tr else ""
+        messages_so_far.append({"role": "assistant", "content": resp_content})
+
+    # ── 12. Final text (verify no state corruption) ──
     run("text: final check",
         [{"role": "user", "content": "Say hello in Japanese, Chinese, and Korean. Be brief."}],
         max_tokens=64)
