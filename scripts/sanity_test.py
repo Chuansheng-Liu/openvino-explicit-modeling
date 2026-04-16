@@ -899,7 +899,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool,
 
     run("category: code generation",
         [{"role": "user", "content": "Write a Python function called 'fibonacci' that takes an integer n and returns the nth Fibonacci number using dynamic programming. Include a brief docstring."}],
-        max_tokens=256, expect_content_contains="fibonacci")
+        max_tokens=512, expect_content_contains="fibonacci")
 
     run("category: creative writing",
         [{"role": "user", "content": "Write a short poem (4 lines) about sunrise over the ocean."}],
@@ -907,7 +907,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool,
 
     run("category: translation",
         [{"role": "user", "content": "Translate 'The quick brown fox jumps over the lazy dog' into French and German."}],
-        max_tokens=128)
+        max_tokens=256)
 
     run("category: summarization",
         [{"role": "user", "content": "Summarize in 1-2 sentences: 'Artificial intelligence has transformed industries ranging from healthcare to finance, enabling advanced diagnostics and automated trading. These developments raise debates about job displacement and data privacy.'"}],
