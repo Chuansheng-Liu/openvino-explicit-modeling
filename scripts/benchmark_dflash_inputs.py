@@ -20,12 +20,16 @@ Build first:  build.bat (from openvino-explicit-modeling root)
 """
 
 import argparse
+import base64
+import json
 import math
 import os
 import re
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -342,6 +346,79 @@ def run_baseline(exe: Path, prompt: str, max_tokens: int,
     return result.stdout + result.stderr
 
 
+def run_api(prompt: str, max_tokens: int, api_url: str,
+            image_path: str = None) -> dict:
+    """Run via HTTP OpenAI-compatible API and return metrics dict."""
+    if image_path:
+        with open(image_path, "rb") as f:
+            img_data = base64.b64encode(f.read()).decode()
+        ext = image_path.rsplit(".", 1)[-1].lower() if "." in image_path else "png"
+        mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png"}.get(ext, ext)
+        content = [
+            {"type": "image_url",
+             "image_url": {"url": f"data:image/{mime};base64,{img_data}"}},
+            {"type": "text", "text": prompt},
+        ]
+    else:
+        content = prompt
+
+    messages = [{"role": "user", "content": content}]
+    payload = {
+        "model": "default",
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        f"{api_url}/v1/chat/completions", data=body,
+        headers={"Content-Type": "application/json",
+                 "Authorization": "Bearer test"},
+    )
+
+    # Bypass proxy for localhost
+    proxy_handler = urllib.request.ProxyHandler({})
+    opener = urllib.request.build_opener(proxy_handler)
+
+    t0 = time.time()
+    with opener.open(req, timeout=600) as resp:
+        data = json.loads(resp.read().decode())
+    wall_ms = (time.time() - t0) * 1000
+
+    usage = data.get("usage", {})
+    perf = usage.get("performance", {})
+
+    tokens = usage.get("completion_tokens", 0)
+    ttft_ms = perf.get("ttft_ms", 0.0)
+    throughput = perf.get("throughput_tps", 0.0)
+    decode_ms = perf.get("decode_ms", 0.0)
+    prefill_ms = perf.get("prefill_ms", 0.0)
+    prefix_cached = perf.get("prefix_cached_tokens", 0)
+
+    tpot_ms = 1000.0 / throughput if throughput > 0 else 0.0
+
+    text = ""
+    choices = data.get("choices", [])
+    if choices:
+        msg = choices[0].get("message", {})
+        text = msg.get("content", "") or ""
+
+    return {
+        "tokens": tokens,
+        "ttft_ms": ttft_ms,
+        "tpot_ms": tpot_ms,
+        "throughput": throughput,
+        "decode_ms": decode_ms,
+        "draft_steps": 0,
+        "accept_rate": 0.0,
+        "avg_accepted": 0.0,
+        "draft_avg_ms": 0.0,
+        "verify_avg_ms": 0.0,
+        "output_text": text,
+        "wall_ms": wall_ms,
+    }
+
+
 def mean_std(vals):
     if not vals:
         return 0.0, 0.0
@@ -569,7 +646,8 @@ def _save_single_report(questions, results, elapsed, args, label):
     print(f"\n[Report] {md_path}")
 
 
-def _print_comparison(questions, dflash_results, baseline_results, elapsed, args):
+def _print_comparison(questions, dflash_results, baseline_results, elapsed, args,
+                      label_a="Baseline", label_b="DFlash"):
     """Print side-by-side comparison table."""
     d_ok = [r for r in dflash_results if r.success]
     b_ok = [r for r in baseline_results if r.success]
@@ -583,10 +661,11 @@ def _print_comparison(questions, dflash_results, baseline_results, elapsed, args
 
     print()
     print("=" * 130)
-    print("  BASELINE vs DFLASH COMPARISON")
+    print(f"  {label_a.upper()} vs {label_b.upper()} COMPARISON")
     print("=" * 130)
-    hdr = (f"{'Category':<28s} {'Base tok/s':>10s} {'DFlash tok/s':>12s} {'Speedup':>8s} "
-           f"{'Base TPOT':>10s} {'DFlash TPOT':>12s} {'Accept%':>8s} {'Tokens':>7s}")
+    la, lb = label_a[:12], label_b[:12]
+    hdr = (f"{'Category':<28s} {la+' tok/s':>12s} {lb+' tok/s':>12s} {'Speedup':>8s} "
+           f"{la+' TTFT':>12s} {lb+' TTFT':>12s} {'Tokens':>7s}")
     print(hdr)
     print("-" * 130)
 
@@ -594,14 +673,13 @@ def _print_comparison(questions, dflash_results, baseline_results, elapsed, args
         ds = d_stats.get(cat)
         bs = b_stats.get(cat)
         if ds is None and bs is None:
-            print(f"{cat:<28s} {'FAILED':>10s}")
+            print(f"{cat:<28s} {'FAILED':>12s}")
             continue
 
+        a_tp = f"{ds['tp']:.2f}" if ds else "-"
         b_tp = f"{bs['tp']:.2f}" if bs else "-"
-        d_tp = f"{ds['tp']:.2f}" if ds else "-"
-        b_tpot = f"{bs['tpot']:.2f}" if bs else "-"
-        d_tpot = f"{ds['tpot']:.2f}" if ds else "-"
-        acc = f"{ds['acc']:.1f}%" if ds and ds['acc'] > 0 else "-"
+        a_ttft = f"{ds['ttft']:.0f}" if ds else "-"
+        b_ttft = f"{bs['ttft']:.0f}" if bs else "-"
         tok = f"{ds['tokens']:.0f}" if ds else (f"{bs['tokens']:.0f}" if bs else "-")
 
         if ds and bs and bs['tp'] > 0:
@@ -610,36 +688,34 @@ def _print_comparison(questions, dflash_results, baseline_results, elapsed, args
         else:
             sp_str = "-"
 
-        print(f"{cat:<28s} {b_tp:>10s} {d_tp:>12s} {sp_str:>8s} "
-              f"{b_tpot:>10s} {d_tpot:>12s} {acc:>8s} {tok:>7s}")
+        print(f"{cat:<28s} {a_tp:>12s} {b_tp:>12s} {sp_str:>8s} "
+              f"{a_ttft:>12s} {b_ttft:>12s} {tok:>7s}")
 
     print("-" * 130)
 
     # Overall
+    a_tp = f"{d_overall['tp']:.2f}" if d_overall['all_tp'] else "-"
     b_tp = f"{b_overall['tp']:.2f}" if b_overall['all_tp'] else "-"
-    d_tp = f"{d_overall['tp']:.2f}" if d_overall['all_tp'] else "-"
-    b_tpot = f"{b_overall['tpot']:.2f}" if b_overall['all_tp'] else "-"
-    d_tpot = f"{d_overall['tpot']:.2f}" if d_overall['all_tp'] else "-"
-    acc = f"{d_overall['acc']:.1f}%" if d_overall['all_acc'] else "-"
+    a_ttft = f"{d_overall['ttft']:.0f}" if d_overall['all_tp'] else "-"
+    b_ttft = f"{b_overall['ttft']:.0f}" if b_overall['all_tp'] else "-"
     if d_overall['all_tp'] and b_overall['all_tp'] and b_overall['tp'] > 0:
         sp = d_overall['tp'] / b_overall['tp']
         sp_str = f"{sp:.2f}x"
     else:
         sp_str = "-"
-    print(f"{'** OVERALL **':<28s} {b_tp:>10s} {d_tp:>12s} {sp_str:>8s} "
-          f"{b_tpot:>10s} {d_tpot:>12s} {acc:>8s} {'':>7s}")
+    print(f"{'** OVERALL **':<28s} {a_tp:>12s} {b_tp:>12s} {sp_str:>8s} "
+          f"{a_ttft:>12s} {b_ttft:>12s} {'':>7s}")
     print("=" * 130)
 
     if d_overall['all_tp'] and b_overall['all_tp'] and b_overall['tp'] > 0:
-        print(f"\n  DFlash speedup over baseline: {d_overall['tp'] / b_overall['tp']:.2f}x "
-              f"({b_overall['tp']:.2f} -> {d_overall['tp']:.2f} tok/s)")
-    if d_overall['all_acc']:
-        print(f"  DFlash acceptance rate: {d_overall['acc']:.1f}%")
+        print(f"\n  {label_a} -> {label_b} speedup: {d_overall['tp'] / b_overall['tp']:.2f}x "
+              f"({d_overall['tp']:.2f} -> {b_overall['tp']:.2f} tok/s)")
 
     print(f"\n[Total]  {elapsed:.0f}s")
 
 
-def _save_comparison_report(questions, dflash_results, baseline_results, elapsed, args):
+def _save_comparison_report(questions, dflash_results, baseline_results, elapsed, args,
+                            label_a="Baseline", label_b="DFlash"):
     """Save side-by-side comparison markdown report."""
     cats = _get_cats(questions)
     d_stats, d_overall = _aggregate(dflash_results, questions)
@@ -647,35 +723,35 @@ def _save_comparison_report(questions, dflash_results, baseline_results, elapsed
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    md_path = REPORT_DIR / f"dflash_vs_baseline_{ts}.md"
+    safe_a = label_a.replace(" ", "_").replace("(", "").replace(")", "").lower()
+    safe_b = label_b.replace(" ", "_").replace("(", "").replace(")", "").lower()
+    md_path = REPORT_DIR / f"{safe_a}_vs_{safe_b}_{ts}.md"
 
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write("# DFlash vs Baseline Comparison\n\n")
+        f.write(f"# {label_a} vs {label_b} Comparison\n\n")
         f.write(f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  \n")
-        f.write(f"**Config**: {args.quant} | max_tokens={args.max_tokens} | "
-                f"block_size={args.block_size} | runs={args.runs}  \n")
-        f.write(f"**Device**: {DEVICE} | Model: {args.target_model} | Draft: {args.draft_model}  \n")
+        f.write(f"**Config**: max_tokens={args.max_tokens} | runs={args.runs}  \n")
+        f.write(f"**Device**: {DEVICE}  \n")
         f.write(f"**Total time**: {elapsed:.0f}s\n\n")
 
         # Comparison table
         f.write("## Performance Comparison\n\n")
-        f.write("| Category | Baseline tok/s | DFlash tok/s | Speedup | "
-                "Baseline TPOT (ms) | DFlash TPOT (ms) | Accept % | Tokens |\n")
+        f.write(f"| Category | {label_a} tok/s | {label_b} tok/s | Speedup | "
+                f"{label_a} TTFT (ms) | {label_b} TTFT (ms) | Tokens |\n")
         f.write("|----------|---------------:|-------------:|--------:|"
-                "-------------------:|-----------------:|---------:|-------:|\n")
+                "-------------------:|-----------------:|-------:|\n")
 
         for cat in cats:
             ds = d_stats.get(cat)
             bs = b_stats.get(cat)
             if ds is None and bs is None:
-                f.write(f"| {cat} | FAILED | FAILED | - | - | - | - | - |\n")
+                f.write(f"| {cat} | FAILED | FAILED | - | - | - | - |\n")
                 continue
 
+            a_tp = f"{ds['tp']:.2f}" if ds else "-"
             b_tp = f"{bs['tp']:.2f}" if bs else "-"
-            d_tp = f"{ds['tp']:.2f}" if ds else "-"
-            b_tpot = f"{bs['tpot']:.2f}" if bs else "-"
-            d_tpot = f"{ds['tpot']:.2f}" if ds else "-"
-            acc = f"{ds['acc']:.1f}" if ds and ds['acc'] > 0 else "-"
+            a_ttft = f"{ds['ttft']:.0f}" if ds else "-"
+            b_ttft = f"{bs['ttft']:.0f}" if bs else "-"
             tok = f"{ds['tokens']:.0f}" if ds else (f"{bs['tokens']:.0f}" if bs else "-")
 
             if ds and bs and bs['tp'] > 0:
@@ -684,72 +760,53 @@ def _save_comparison_report(questions, dflash_results, baseline_results, elapsed
             else:
                 sp_str = "-"
 
-            f.write(f"| {cat} | {b_tp} | {d_tp} | {sp_str} | "
-                    f"{b_tpot} | {d_tpot} | {acc} | {tok} |\n")
+            f.write(f"| {cat} | {a_tp} | {b_tp} | {sp_str} | "
+                    f"{a_ttft} | {b_ttft} | {tok} |\n")
 
         # Overall row
+        a_tp = f"{d_overall['tp']:.2f}" if d_overall['all_tp'] else "-"
         b_tp = f"{b_overall['tp']:.2f}" if b_overall['all_tp'] else "-"
-        d_tp = f"{d_overall['tp']:.2f}" if d_overall['all_tp'] else "-"
-        b_tpot = f"{b_overall['tpot']:.2f}" if b_overall['all_tp'] else "-"
-        d_tpot = f"{d_overall['tpot']:.2f}" if d_overall['all_tp'] else "-"
-        acc = f"{d_overall['acc']:.1f}" if d_overall['all_acc'] else "-"
+        a_ttft = f"{d_overall['ttft']:.0f}" if d_overall['all_tp'] else "-"
+        b_ttft = f"{b_overall['ttft']:.0f}" if b_overall['all_tp'] else "-"
         if d_overall['all_tp'] and b_overall['all_tp'] and b_overall['tp'] > 0:
             sp = d_overall['tp'] / b_overall['tp']
             sp_str = f"**{sp:.2f}x**"
         else:
             sp_str = "-"
-        f.write(f"| **OVERALL** | **{b_tp}** | **{d_tp}** | {sp_str} | "
-                f"{b_tpot} | {d_tpot} | {acc} | - |\n")
+        f.write(f"| **OVERALL** | **{a_tp}** | **{b_tp}** | {sp_str} | "
+                f"{a_ttft} | {b_ttft} | - |\n")
 
         # Detailed per-mode results
-        for label, results in [("DFlash", dflash_results), ("Baseline", baseline_results)]:
+        for label, results in [(label_a, dflash_results), (label_b, baseline_results)]:
             ok = [r for r in results if r.success]
             if not ok:
                 continue
             stats, ovr = _aggregate(results, questions)
 
             f.write(f"\n## {label} Details\n\n")
-            f.write("| Category | tok/s | TTFT (ms) | TPOT (ms) | Tokens |")
-            if label == "DFlash":
-                f.write(" Accept % | Avg Acc | Draft (ms) | Verify (ms) |")
-            f.write("\n")
-            f.write("|----------|------:|----------:|----------:|-------:|")
-            if label == "DFlash":
-                f.write("---------:|--------:|-----------:|------------:|")
-            f.write("\n")
+            f.write("| Category | tok/s | TTFT (ms) | TPOT (ms) | Tokens |\n")
+            f.write("|----------|------:|----------:|----------:|-------:|\n")
 
             for cat in cats:
                 s = stats.get(cat)
                 if s is None:
-                    f.write(f"| {cat} | FAILED | | | |")
-                    if label == "DFlash":
-                        f.write(" | | | |")
-                    f.write("\n")
+                    f.write(f"| {cat} | FAILED | | | |\n")
                     continue
-                f.write(f"| {cat} | {s['tp']:.2f} | {s['ttft']:.0f} | {s['tpot']:.2f} | {s['tokens']:.0f} |")
-                if label == "DFlash":
-                    acc = f"{s['acc']:.1f}" if s['acc'] > 0 else "-"
-                    avg = f"{s['avgacc']:.2f}" if s['avgacc'] > 0 else "-"
-                    dms = f"{s['draft_ms']:.1f}" if s['draft_ms'] > 0 else "-"
-                    vms = f"{s['verify_ms']:.1f}" if s['verify_ms'] > 0 else "-"
-                    f.write(f" {acc} | {avg} | {dms} | {vms} |")
-                f.write("\n")
+                f.write(f"| {cat} | {s['tp']:.2f} | {s['ttft']:.0f} | {s['tpot']:.2f} | {s['tokens']:.0f} |\n")
 
         # Summary
         f.write("\n## Summary\n\n")
         if d_overall['all_tp'] and b_overall['all_tp'] and b_overall['tp'] > 0:
             sp = d_overall['tp'] / b_overall['tp']
-            f.write(f"- **DFlash speedup**: {sp:.2f}x over baseline "
-                    f"({b_overall['tp']:.2f} -> {d_overall['tp']:.2f} tok/s)\n")
-        if d_overall['all_acc']:
-            f.write(f"- **DFlash acceptance rate**: {d_overall['acc']:.1f}%\n")
+            f.write(f"- **{label_a} -> {label_b} ratio**: {sp:.2f}x "
+                    f"({d_overall['tp']:.2f} -> {b_overall['tp']:.2f} tok/s)\n")
         if d_overall['all_tp']:
-            f.write(f"- **DFlash throughput range**: {min(d_overall['all_tp']):.2f} - {max(d_overall['all_tp']):.2f} tok/s\n")
+            f.write(f"- **{label_a} throughput range**: {min(d_overall['all_tp']):.2f} - {max(d_overall['all_tp']):.2f} tok/s\n")
         if b_overall['all_tp']:
-            f.write(f"- **Baseline throughput range**: {min(b_overall['all_tp']):.2f} - {max(b_overall['all_tp']):.2f} tok/s\n")
-        d_ok = sum(1 for r in dflash_results if r.success)
+            f.write(f"- **{label_b} throughput range**: {min(b_overall['all_tp']):.2f} - {max(b_overall['all_tp']):.2f} tok/s\n")
+        a_ok = sum(1 for r in dflash_results if r.success)
         b_ok = sum(1 for r in baseline_results if r.success)
-        f.write(f"- **Runs**: DFlash {d_ok}/{len(dflash_results)}, Baseline {b_ok}/{len(baseline_results)}\n")
+        f.write(f"- **Runs**: {label_a} {a_ok}/{len(dflash_results)}, {label_b} {b_ok}/{len(baseline_results)}\n")
 
     print(f"\n[Report] {md_path}")
 
@@ -771,26 +828,34 @@ def main():
                         help="Target model directory name (default: Qwen3.5-4B)")
     parser.add_argument("--draft-model", type=str, default="Qwen3.5-4B-Dflash",
                         help="Draft model directory name (default: Qwen3.5-4B-Dflash)")
-    parser.add_argument("--mode", choices=["dflash", "baseline", "both"], default="dflash",
-                        help="What to benchmark: dflash, baseline, or both (default: dflash)")
+    parser.add_argument("--mode", choices=["dflash", "baseline", "both", "api", "dflash+api"], default="dflash",
+                        help="What to benchmark: dflash, baseline, both, api (HTTP), dflash+api (compare)")
+    parser.add_argument("--api-url", default="http://127.0.0.1:8080",
+                        help="ov_serve base URL for api mode (default: http://127.0.0.1:8080)")
     parser.add_argument("--test-type", choices=["text", "vl", "all"], default="text",
                         help="Test category type: text, vl, or all (default: text)")
     parser.add_argument("--dry-run", action="store_true", help="Print config without running")
     args = parser.parse_args()
 
-    # Resolve model paths
-    if args.models_root:
-        models_root = Path(args.models_root)
-    else:
-        print("ERROR: --models-root is required (dir containing target and draft model dirs)")
-        sys.exit(1)
-    model_dir = models_root / args.target_model
-    draft_dir = models_root / args.draft_model
-
-    run_dflash_mode = args.mode in ("dflash", "both")
+    # Resolve model paths — not required for api-only mode
+    run_dflash_mode = args.mode in ("dflash", "both", "dflash+api")
     run_baseline_mode = args.mode in ("baseline", "both")
+    run_api_mode = args.mode in ("api", "dflash+api")
 
-    setup_env()
+    if run_dflash_mode or run_baseline_mode:
+        if args.models_root:
+            models_root = Path(args.models_root)
+        else:
+            print("ERROR: --models-root is required for exe modes (dir containing target and draft model dirs)")
+            sys.exit(1)
+        model_dir = models_root / args.target_model
+        draft_dir = models_root / args.draft_model
+    else:
+        model_dir = None
+        draft_dir = None
+
+    if run_dflash_mode or run_baseline_mode:
+        setup_env()
 
     dflash_exe = find_exe(DFLASH_EXE_CANDIDATES, "DFlash") if run_dflash_mode else None
     baseline_exe = find_exe(BASELINE_EXE_CANDIDATES, "Baseline") if run_baseline_mode else None
@@ -803,7 +868,6 @@ def main():
     else:
         question_pool = TEXT_QUESTIONS + VL_QUESTIONS
 
-    # Validate VL image exists when running VL tests
     # Validate VL images exist when running VL tests
     vl_images = set(q.get("image") for q in question_pool if q.get("image"))
     for img in vl_images:
@@ -818,12 +882,15 @@ def main():
     else:
         questions = question_pool
 
-    total_runs = len(questions) * args.runs
-    if args.mode == "both":
-        total_runs *= 2
+    n_modes = sum([run_dflash_mode, run_baseline_mode, run_api_mode])
+    total_runs = len(questions) * args.runs * n_modes
 
     type_label = {"text": "Text", "vl": "Vision-Language", "all": "Text + VL"}
-    mode_label = {"dflash": "DFlash only", "baseline": "Baseline only", "both": "DFlash + Baseline"}
+    mode_label = {
+        "dflash": "DFlash only", "baseline": "Baseline only",
+        "both": "DFlash + Baseline", "api": "HTTP API only",
+        "dflash+api": "DFlash exe + HTTP API",
+    }
     print()
     print("=" * 80)
     print("  DFlash Input Category Benchmark")
@@ -832,13 +899,17 @@ def main():
     print(f"  Mode           : {mode_label[args.mode]}")
     print(f"  Test type      : {type_label[args.test_type]}")
     print(f"  Categories     : {len(questions)}")
-    print(f"  Model          : {model_dir}")
+    if model_dir:
+        print(f"  Model          : {model_dir}")
     if run_dflash_mode:
         print(f"  Draft model    : {draft_dir}")
+    if run_api_mode:
+        print(f"  API URL        : {args.api_url}")
     print(f"  Max new tokens : {args.max_tokens}")
     if run_dflash_mode:
         print(f"  Block size     : {args.block_size}")
-    print(f"  Quantization   : {args.quant}")
+    if run_dflash_mode or run_baseline_mode:
+        print(f"  Quantization   : {args.quant}")
     print(f"  Runs per prompt: {args.runs}")
     print(f"  Total runs     : {total_runs}")
     if dflash_exe:
@@ -857,6 +928,7 @@ def main():
     # ── Run benchmark ────────────────────────────────────────────
     dflash_results: list[RunResult] = []
     baseline_results: list[RunResult] = []
+    api_results: list[RunResult] = []
     run_idx = 0
     t_start = time.time()
 
@@ -951,6 +1023,44 @@ def main():
                         category=q["category"], prompt=q["prompt"], run=r, success=False
                     ))
 
+            # --- API run ---
+            if run_api_mode:
+                run_idx += 1
+                pct = int(100 * run_idx / total_runs)
+                print(f"\n[{run_idx}/{total_runs} {pct}%] [API] {label}")
+                print("-" * 70)
+                print(f"  Prompt: {q['prompt'][:100]}...")
+                if image_path:
+                    print(f"  Image:  {image_path}")
+
+                try:
+                    m = run_api(
+                        q["prompt"], args.max_tokens, args.api_url,
+                        image_path=image_path,
+                    )
+                    res = RunResult(
+                        category=q["category"], prompt=q["prompt"], run=r,
+                        tokens=m["tokens"], ttft_ms=m["ttft_ms"], tpot_ms=m["tpot_ms"],
+                        throughput=m["throughput"], decode_ms=m["decode_ms"],
+                        draft_steps=m["draft_steps"], accept_rate=m["accept_rate"],
+                        avg_accepted=m["avg_accepted"], draft_avg_ms=m["draft_avg_ms"],
+                        verify_avg_ms=m["verify_avg_ms"], output_text=m["output_text"],
+                    )
+                    api_results.append(res)
+                    print(f"  => {res.throughput:.1f} tok/s | TTFT={res.ttft_ms:.0f}ms | "
+                          f"TPOT={res.tpot_ms:.2f}ms | tokens={res.tokens} | "
+                          f"wall={m['wall_ms']:.0f}ms")
+                except (urllib.error.URLError, urllib.error.HTTPError) as e:
+                    print(f"  => FAILED: {e}")
+                    api_results.append(RunResult(
+                        category=q["category"], prompt=q["prompt"], run=r, success=False
+                    ))
+                except Exception as e:
+                    print(f"  => FAILED: {e}")
+                    api_results.append(RunResult(
+                        category=q["category"], prompt=q["prompt"], run=r, success=False
+                    ))
+
     elapsed = time.time() - t_start
 
     # Merge results for single-mode reporting
@@ -958,8 +1068,10 @@ def main():
         all_results = dflash_results
     elif args.mode == "baseline":
         all_results = baseline_results
+    elif args.mode == "api":
+        all_results = api_results
     else:
-        all_results = None  # handled separately in "both" mode
+        all_results = None  # handled separately in comparison modes
 
     # ═════════════════════════════════════════════════════════════
     # Print and save results
@@ -967,8 +1079,13 @@ def main():
     if args.mode == "both":
         _print_comparison(questions, dflash_results, baseline_results, elapsed, args)
         _save_comparison_report(questions, dflash_results, baseline_results, elapsed, args)
-    else:
-        label = "DFlash" if args.mode == "dflash" else "Baseline"
+    elif args.mode == "dflash+api":
+        _print_comparison(questions, dflash_results, api_results, elapsed, args,
+                          label_a="DFlash (exe)", label_b="DFlash (API)")
+        _save_comparison_report(questions, dflash_results, api_results, elapsed, args,
+                                label_a="DFlash (exe)", label_b="DFlash (API)")
+    elif args.mode in ("dflash", "baseline", "api"):
+        label = {"dflash": "DFlash", "baseline": "Baseline", "api": "API"}[args.mode]
         _print_single_results(questions, all_results, elapsed, args, label)
         _save_single_report(questions, all_results, elapsed, args, label)
 
