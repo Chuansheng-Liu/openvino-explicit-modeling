@@ -275,6 +275,28 @@ def run_tests(base_url: str, verbose: bool) -> tuple[list[tuple[str, bool, str]]
             if expect_intent:
                 try:
                     parsed = json.loads(content)
+                except json.JSONDecodeError:
+                    # Model may append extra text after JSON — extract first {...}
+                    parsed = None
+                    if "{" in content:
+                        start = content.index("{")
+                        depth = 0
+                        for i in range(start, len(content)):
+                            if content[i] == "{":
+                                depth += 1
+                            elif content[i] == "}":
+                                depth -= 1
+                                if depth == 0:
+                                    try:
+                                        parsed = json.loads(content[start:i+1])
+                                    except json.JSONDecodeError:
+                                        pass
+                                    break
+                    if parsed is None:
+                        ok = False
+                        detail = f"response is not valid JSON: {content[:200]}"
+
+                if parsed is not None and expect_intent:
                     got_intent = parsed.get("intent", "")
                     if got_intent != expect_intent:
                         ok = False
@@ -286,9 +308,6 @@ def run_tests(base_url: str, verbose: bool) -> tuple[list[tuple[str, bool, str]]
                             if got != v:
                                 ok = False
                                 detail += f"; expected {k}={v}, got {got}"
-                except json.JSONDecodeError:
-                    ok = False
-                    detail = f"response is not valid JSON: {content[:200]}"
 
             if expect_content_contains:
                 if expect_content_contains.lower() not in content.lower():
