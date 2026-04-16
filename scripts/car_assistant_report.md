@@ -72,89 +72,28 @@
 Below is the full output of a single run, showing the multi-turn conversation flow,
 model responses, prefix cache reuse, and per-turn TTFT/throughput.
 
-```
-Turn  1 — [Chat] 你好呀 (cold start, no cache)
-  prompt: 1987 tokens | ttft: 1088ms | 19.6 t/s
-  → 你好呀！我是联博士，你的智能助手。有什么可以帮你的吗？                              ✅ PASS
-
-Turn  2 — [Text Intent] 打开主驾车窗
-  prompt: 2135 tokens | ttft: 164ms | 19.8 t/s | cache: 2004 tokens reused
-  → {"intent": "vehicle_window", "arguments": {"action": "on", "position": "front_left"}}  ✅ PASS
-
-Turn  3 — [Text Intent] 关闭空调
-  prompt: 2287 tokens | ttft: 153ms | 19.8 t/s | cache: 2158 tokens reused
-  → {"intent": "hvac_action", "arguments": {"action": "off"}}                              ✅ PASS
-
-Turn  4 — [Text Intent] 播放音乐
-  prompt: 2433 tokens | ttft: 159ms | 19.7 t/s | cache: 2304 tokens reused
-  → {"intent": "music_play_action", "arguments": {"action": "on"}}                         ✅ PASS
-
-Turn  5 — [Text Intent] 切换到运动模式
-  prompt: 2580 tokens | ttft: 156ms | 19.9 t/s | cache: 2450 tokens reused
-  → {"intent": "vehicle_drive_mode", "arguments": {"mode": "sport"}}                       ✅ PASS
-
-Turn  6 — [VL Intent] 🖼️ 打开手指方向的车窗 (pointing left image)
-  prompt: 3207 tokens | ttft: 516ms | 19.3 t/s | cache: 2597 tokens reused
-  → {"intent": "vehicle_window", "arguments": {"action": "on", "position": "front_left"}}  ✅ PASS
-
-Turn  7 — [Text Intent] 下一首
-  prompt: 3359 tokens | ttft: 156ms | 19.3 t/s | cache: 3230 tokens reused
-  → {"intent": "music_up_down", "arguments": {"action": "next"}}                           ✅ PASS
-
-Turn  8 — [Text Intent] 打开YouTube
-  prompt: 3505 tokens | ttft: 160ms | 19.4 t/s | cache: 3376 tokens reused
-  → {"intent": "gui_open_app", "arguments": {"app_name": "YouTube"}}                       ✅ PASS
-
-Turn  9 — [Text Intent] 升高温度
-  prompt: 3652 tokens | ttft: 156ms | 19.3 t/s | cache: 3523 tokens reused
-  → {"intent": "hvac_temp", "arguments": {"area": "all", "temp": 26}}                      ✅ PASS
-
-Turn 10 — [VL Describe] 🖼️ 你看到了什么？ (scene photo)
-  prompt: 4285 tokens | ttft: 350ms | 19.5 t/s | cache: 3676 tokens reused
-  → 这张照片拍摄于一个户外广场，背景是晴朗的蓝天。画面中央有一个巨大的地球仪雕塑，     ✅ PASS
-    上面有金色的"UNIVERSAL"字样，这是环球影城的标志性建筑。周围聚集了许多游客...
-
-Turn 11 — [Text Intent] 打开座椅加热
-  prompt: 4487 tokens | ttft: 157ms | 19.4 t/s | cache: 4357 tokens reused
-  → {"intent": "hvac_seat_heating", "arguments": {"area": "front_left", "level": 3}}       ✅ PASS
-
-Turn 12 — [Text Intent] 回到桌面
-  prompt: 4642 tokens | ttft: 167ms | 19.3 t/s | cache: 4513 tokens reused
-  → {"intent": "gui_go_home", "arguments": {}}                                             ✅ PASS
-
-Turn 13 — [VL Intent] 🖼️ 关闭手指方向的车门 (pointing left image, cached)
-  prompt: 5265 tokens | ttft: 536ms | 19.5 t/s | cache: 4655 tokens reused
-  → {"intent": "vehicle_door", "arguments": {"action": "off", "position": "front_left"}}   ✅ PASS
-
-Turn 14 — [Chat] 今天天气怎么样？
-  prompt: 5419 tokens | ttft: 156ms | 19.6 t/s | cache: 5288 tokens reused
-  → 关于天气情况，我目前无法直接获取外部天气信息。如果您想了解天气，                     ✅ PASS
-    建议您查看手机上的天气应用...
-
-Turn 15 — [Text Intent] 把车换成红色
-  prompt: 5678 tokens | ttft: 168ms | 19.1 t/s | cache: 5546 tokens reused
-  → {"intent": "vehicle_color_change", "arguments": {"color": "red"}}                      ✅ PASS
-
-Turn 16 — [Text Intent] 把所有车窗关上
-  prompt: 5825 tokens | ttft: 160ms | 19.2 t/s | cache: 5695 tokens reused
-  → {"intent": "vehicle_window", "arguments": {"action": "off", "position": "all"}}        ✅ PASS
-
-Turn 17 — [Text Intent] 打开座椅通风
-  prompt: 5977 tokens | ttft: 162ms | 19.3 t/s | cache: 5847 tokens reused
-  → {"intent": "hvac_seat_ventilation", "arguments": {"area": "front_left", "level": 3}}   ✅ PASS
-
-Turn 18 — [VL Intent] 🖼️ 打开手指方向的车门 (pointing left image, cached)
-  prompt: 6614 tokens | ttft: 365ms | 18.6 t/s | cache: 6004 tokens reused
-  → {"intent": "vehicle_door", "arguments": {"action": "on", "position": "front_left"}}    ✅ PASS
-
-Turn 19 — [Text Intent] 把温度调到20度
-  prompt: 6770 tokens | ttft: 171ms | 18.5 t/s | cache: 6637 tokens reused
-  → {"intent": "hvac_temp", "arguments": {"area": "all", "temp": 20}}                      ✅ PASS
-
-Turn 20 — [Chat] 好的谢谢，再见
-  prompt: 6925 tokens | ttft: 164ms | 19.0 t/s | cache: 6794 tokens reused
-  → 不客气！再见，祝您用车愉快！                                                           ✅ PASS
-```
+| # | Type | User Input | Prompt | TTFT (ms) | TPS | Cache | Model Output | Result |
+|---|------|-----------|--------|-----------|-----|-------|-------------|--------|
+| 1 | Chat | 你好呀 | 1987 | 1088 | 19.6 | — | 你好呀！我是联博士，你的智能助手。有什么可以帮你的吗？ | ✅ |
+| 2 | Text | 打开主驾车窗 | 2135 | 164 | 19.8 | 2004 | `{"intent":"vehicle_window","arguments":{"action":"on","position":"front_left"}}` | ✅ |
+| 3 | Text | 关闭空调 | 2287 | 153 | 19.8 | 2158 | `{"intent":"hvac_action","arguments":{"action":"off"}}` | ✅ |
+| 4 | Text | 播放音乐 | 2433 | 159 | 19.7 | 2304 | `{"intent":"music_play_action","arguments":{"action":"on"}}` | ✅ |
+| 5 | Text | 切换到运动模式 | 2580 | 156 | 19.9 | 2450 | `{"intent":"vehicle_drive_mode","arguments":{"mode":"sport"}}` | ✅ |
+| 6 | 🖼️ VL | 打开手指方向的车窗 | 3207 | 516 | 19.3 | 2597 | `{"intent":"vehicle_window","arguments":{"action":"on","position":"front_left"}}` | ✅ |
+| 7 | Text | 下一首 | 3359 | 156 | 19.3 | 3230 | `{"intent":"music_up_down","arguments":{"action":"next"}}` | ✅ |
+| 8 | Text | 打开YouTube | 3505 | 160 | 19.4 | 3376 | `{"intent":"gui_open_app","arguments":{"app_name":"YouTube"}}` | ✅ |
+| 9 | Text | 升高温度 | 3652 | 156 | 19.3 | 3523 | `{"intent":"hvac_temp","arguments":{"area":"all","temp":26}}` | ✅ |
+| 10 | 🖼️ VL | 你看到了什么？ | 4285 | 350 | 19.5 | 3676 | 这张照片拍摄于一个户外广场...巨大的地球仪雕塑，上面有"UNIVERSAL"字样，这是环球影城的标志性建筑... | ✅ |
+| 11 | Text | 打开座椅加热 | 4487 | 157 | 19.4 | 4357 | `{"intent":"hvac_seat_heating","arguments":{"area":"front_left","level":3}}` | ✅ |
+| 12 | Text | 回到桌面 | 4642 | 167 | 19.3 | 4513 | `{"intent":"gui_go_home","arguments":{}}` | ✅ |
+| 13 | 🖼️ VL | 关闭手指方向的车门 | 5265 | 536 | 19.5 | 4655 | `{"intent":"vehicle_door","arguments":{"action":"off","position":"front_left"}}` | ✅ |
+| 14 | Chat | 今天天气怎么样？ | 5419 | 156 | 19.6 | 5288 | 关于天气情况，我目前无法直接获取外部天气信息。建议您查看手机上的天气应用... | ✅ |
+| 15 | Text | 把车换成红色 | 5678 | 168 | 19.1 | 5546 | `{"intent":"vehicle_color_change","arguments":{"color":"red"}}` | ✅ |
+| 16 | Text | 把所有车窗关上 | 5825 | 160 | 19.2 | 5695 | `{"intent":"vehicle_window","arguments":{"action":"off","position":"all"}}` | ✅ |
+| 17 | Text | 打开座椅通风 | 5977 | 162 | 19.3 | 5847 | `{"intent":"hvac_seat_ventilation","arguments":{"area":"front_left","level":3}}` | ✅ |
+| 18 | 🖼️ VL | 打开手指方向的车门 | 6614 | 365 | 18.6 | 6004 | `{"intent":"vehicle_door","arguments":{"action":"on","position":"front_left"}}` | ✅ |
+| 19 | Text | 把温度调到20度 | 6770 | 171 | 18.5 | 6637 | `{"intent":"hvac_temp","arguments":{"area":"all","temp":20}}` | ✅ |
+| 20 | Chat | 好的谢谢，再见 | 6925 | 164 | 19.0 | 6794 | 不客气！再见，祝您用车愉快！ | ✅ |
 
 **Result: 20/20 passed** — All intents correctly recognized, VL pointing direction correct,
 prefix cache hit on 19/20 turns (only cold start misses).
