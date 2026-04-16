@@ -1,0 +1,8 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch
+torchvision
+requests
+accelerate
+pillow
+transformers[serving] @ git+https://github.com/huggingface/transformers.git@main

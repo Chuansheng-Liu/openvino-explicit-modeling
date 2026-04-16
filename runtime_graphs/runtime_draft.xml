@@ -1,0 +1,5653 @@
+<?xml version="1.0"?>
+<net name="runtime_gpu_graph" version="11">
+	<layers>
+		<layer id="0" name="target_hidden" type="Input">
+			<data shape="?,?,12800" element_type="f32" execOrder="0" execTimeMcs="not_executed" originalLayersNames="target_hidden" outputLayouts="bfyx" outputPrecisions="f32" primitiveType="wait_for_events__f32" runtimePrecision="f32" />
+			<output>
+				<port id="0" precision="FP32">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>12800</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="1" name="position_ids" type="Input">
+			<data shape="?,?" element_type="i64" execOrder="1" execTimeMcs="not_executed" originalLayersNames="position_ids" outputLayouts="bfyx" outputPrecisions="i64" primitiveType="wait_for_events__i64" runtimePrecision="i64" />
+			<output>
+				<port id="0" precision="I64">
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="2" name="input_ids" type="Input">
+			<data shape="?,?" element_type="i64" execOrder="2" execTimeMcs="not_executed" originalLayersNames="input_ids" outputLayouts="bfyx" outputPrecisions="i64" primitiveType="wait_for_events__i64" runtimePrecision="i64" />
+			<output>
+				<port id="0" precision="I64">
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="3" name="Convert_7638" type="Reorder">
+			<data execOrder="151" execTimeMcs="not_executed" originalLayersNames="Convert_7638" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="reorder_data__i64" runtimePrecision="i64" />
+			<input>
+				<port id="0" precision="I64">
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="4" name="Gather_7640" type="Gather">
+			<data execOrder="154" execTimeMcs="not_executed" originalLayersNames="Gather_7640,Multiply_137221" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="gather_ref__u8" runtimePrecision="u8" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="5" name="RMS_7652" type="rms">
+			<data execOrder="160" execTimeMcs="not_executed" originalLayersNames="RMS_7652" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="6" name="MatMul_7654_scale_down" type="Eltwise">
+			<data execOrder="165" execTimeMcs="not_executed" originalLayersNames="MatMul_7654_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="7" name="DynamicQuantize_140070" type="DynamicQuantize">
+			<data execOrder="169" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140070" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="8" name="MatMul_7654" type="FullyConnected">
+			<data execOrder="173" execTimeMcs="not_executed" originalLayersNames="MatMul_7654" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="9" name="Reshape_7658" type="Reshape">
+			<data execOrder="176" execTimeMcs="not_executed" originalLayersNames="Reshape_7658" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="10" name="Transpose_7660" type="Permute">
+			<data execOrder="180" execTimeMcs="not_executed" originalLayersNames="Transpose_7660" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="11" name="RMS_7666" type="rms">
+			<data execOrder="184" execTimeMcs="not_executed" originalLayersNames="RMS_7666" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="12" name="Convert_7646" type="Reorder">
+			<data execOrder="150" execTimeMcs="not_executed" originalLayersNames="Convert_7646" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="reorder_data__i64" runtimePrecision="i64" />
+			<input>
+				<port id="0" precision="I64">
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="13" name="Unsqueeze_7648" type="Reshape">
+			<data execOrder="153" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_7648" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="14" name="Multiply_7649" type="Eltwise">
+			<data execOrder="156" execTimeMcs="not_executed" originalLayersNames="Multiply_7649" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="15" name="Cos_7650" type="Activation">
+			<data execOrder="159" execTimeMcs="not_executed" originalLayersNames="Cos_7650" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="activation_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="16" name="ShapeOf_131967" type="shape_of">
+			<data execOrder="164" execTimeMcs="not_executed" originalLayersNames="ShapeOf_131967" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="shape_of_cpu_impl__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>3</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="17" name="Gather_131970" type="Gather">
+			<data execOrder="167" execTimeMcs="not_executed" originalLayersNames="Gather_131970" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="gather_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>3</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="18" name="Squeeze_131971" type="Reshape">
+			<data execOrder="171" execTimeMcs="not_executed" originalLayersNames="Squeeze_131971" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="undef" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32" />
+				<port id="2" precision="I32" />
+			</output>
+		</layer>
+		<layer id="19" name="ShapeOf_131974" type="shape_of">
+			<data execOrder="168" execTimeMcs="not_executed" originalLayersNames="ShapeOf_131974" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="shape_of_cpu_impl__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>3</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="20" name="Gather_131977" type="Gather">
+			<data execOrder="172" execTimeMcs="not_executed" originalLayersNames="Gather_131977" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="gather_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>3</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="21" name="Multiply_136932" type="Eltwise">
+			<data execOrder="179" execTimeMcs="not_executed" originalLayersNames="Multiply_136932" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="eltwise_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="22" name="Squeeze_131978" type="Reshape">
+			<data execOrder="183" execTimeMcs="not_executed" originalLayersNames="Squeeze_131978" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="undef" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32" />
+			</output>
+		</layer>
+		<layer id="23" name="Subtract_7679" type="Eltwise">
+			<data execOrder="187" execTimeMcs="not_executed" originalLayersNames="Subtract_7679" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="eltwise_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32" />
+				<port id="1" precision="I32" />
+			</input>
+			<output>
+				<port id="2" precision="I32" />
+			</output>
+		</layer>
+		<layer id="24" name="Range_7681" type="range">
+			<data execOrder="191" execTimeMcs="not_executed" originalLayersNames="Range_7681" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="range_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32" />
+				<port id="1" precision="I32" />
+			</input>
+			<output>
+				<port id="2" precision="I32">
+					<dim>-1</dim>
+				</port>
+				<port id="3" precision="I32">
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="25" name="Gather_7748" type="Gather">
+			<data execOrder="194" execTimeMcs="not_executed" originalLayersNames="Gather_7748" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="gather_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>-1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="26" name="Unsqueeze_7829" type="Reshape">
+			<data execOrder="199" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_7829" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="5" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="27" name="Sin_7651" type="Activation">
+			<data execOrder="158" execTimeMcs="not_executed" originalLayersNames="Sin_7651" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="activation_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="28" name="Gather_7827" type="Gather">
+			<data execOrder="193" execTimeMcs="not_executed" originalLayersNames="Gather_7827" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="gather_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>-1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="29" name="Unsqueeze_7830" type="Reshape">
+			<data execOrder="198" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_7830" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="5" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="30" name="RoPE_7831" type="RoPE">
+			<data execOrder="200" execTimeMcs="not_executed" originalLayersNames="RoPE_7831" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="31" name="MatMul_7641_scale_down" type="Eltwise">
+			<data execOrder="152" execTimeMcs="not_executed" originalLayersNames="MatMul_7641_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f32" runtimePrecision="f32" />
+			<input>
+				<port id="0" precision="FP32">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>12800</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>12800</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="32" name="DynamicQuantize_140076" type="DynamicQuantize">
+			<data execOrder="155" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140076" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>12800</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>12800</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>12800</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="33" name="MatMul_7641" type="FullyConnected">
+			<data execOrder="157" execTimeMcs="not_executed" originalLayersNames="MatMul_7641" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>12800</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>12800</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="34" name="RMS_7642" type="rms">
+			<data execOrder="161" execTimeMcs="not_executed" originalLayersNames="RMS_7642" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="5" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="35" name="Concat_7653" type="Concat">
+			<data execOrder="166" execTimeMcs="not_executed" originalLayersNames="Concat_7653" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="concatenation_gpu_simple_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="36" name="MatMul_7655_scale_down" type="Eltwise">
+			<data execOrder="170" execTimeMcs="not_executed" originalLayersNames="MatMul_7655_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="37" name="DynamicQuantize_140082" type="DynamicQuantize">
+			<data execOrder="175" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140082" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="38" name="MatMul_7655" type="FullyConnected">
+			<data execOrder="178" execTimeMcs="not_executed" originalLayersNames="MatMul_7655" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="39" name="Reshape_7662" type="Reshape">
+			<data execOrder="182" execTimeMcs="not_executed" originalLayersNames="Reshape_7662" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="40" name="Transpose_7663" type="Permute">
+			<data execOrder="186" execTimeMcs="not_executed" originalLayersNames="Transpose_7663" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="41" name="RMS_7667" type="rms">
+			<data execOrder="190" execTimeMcs="not_executed" originalLayersNames="RMS_7667" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="42" name="Unsqueeze_7832" type="Reshape">
+			<data execOrder="163" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_7832" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="5" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="43" name="Unsqueeze_7833" type="Reshape">
+			<data execOrder="162" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_7833" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="5" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="44" name="RoPE_7834" type="RoPE">
+			<data execOrder="192" execTimeMcs="not_executed" originalLayersNames="RoPE_7834" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="45" name="Unsqueeze_7835" type="Reshape">
+			<data execOrder="196" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_7835" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="46" name="ShapeOf_131984" type="shape_of">
+			<data execOrder="188" execTimeMcs="not_executed" originalLayersNames="ShapeOf_131984" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="shape_of_cpu_impl__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>4</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="47" name="Gather_131987" type="Gather">
+			<data execOrder="195" execTimeMcs="not_executed" originalLayersNames="Gather_131987" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="gather_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>4</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+				<port id="2" precision="I32">
+					<dim>1</dim>
+				</port>
+				<port id="3" precision="I32">
+					<dim>1</dim>
+				</port>
+				<port id="4" precision="I32">
+					<dim>1</dim>
+				</port>
+				<port id="5" precision="I32">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="48" name="ShapeOf_131988" type="shape_of">
+			<data execOrder="197" execTimeMcs="not_executed" originalLayersNames="ShapeOf_131988" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="shape_of_cpu_impl__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>4</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="49" name="Gather_131991" type="Gather">
+			<data execOrder="201" execTimeMcs="not_executed" originalLayersNames="Gather_131991" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="gather_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>4</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="50" name="Concat_7847" type="Concat">
+			<data execOrder="202" execTimeMcs="not_executed" originalLayersNames="Concat_7847" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="concatenation_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>1</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="I32">
+					<dim>5</dim>
+				</port>
+				<port id="3" precision="I32">
+					<dim>5</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="51" name="Broadcast_7848" type="broadcast">
+			<data execOrder="204" execTimeMcs="not_executed" originalLayersNames="Broadcast_7848" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="52" name="Reshape_7853" type="Reshape">
+			<data execOrder="205" execTimeMcs="not_executed" originalLayersNames="Reshape_7853" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="53" name="DynamicQuantize_140088" type="DynamicQuantize">
+			<data execOrder="174" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140088" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="54" name="MatMul_7656" type="FullyConnected">
+			<data execOrder="177" execTimeMcs="not_executed" originalLayersNames="MatMul_7656" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="55" name="Reshape_7664" type="Reshape">
+			<data execOrder="181" execTimeMcs="not_executed" originalLayersNames="Reshape_7664" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="56" name="Transpose_7665" type="Permute">
+			<data execOrder="185" execTimeMcs="not_executed" originalLayersNames="Transpose_7665" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="57" name="Unsqueeze_7854" type="Reshape">
+			<data execOrder="189" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_7854" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="58" name="Broadcast_7864" type="broadcast">
+			<data execOrder="203" execTimeMcs="not_executed" originalLayersNames="Broadcast_7864,Multiply_138018" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="59" name="Reshape_7868" type="Reshape">
+			<data execOrder="206" execTimeMcs="not_executed" originalLayersNames="Reshape_7868" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="60" name="ScaledDotProductAttention_7870" type="scaled_dot_product_attention">
+			<data execOrder="207" execTimeMcs="not_executed" originalLayersNames="ScaledDotProductAttention_7870" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::sdpa::opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="61" name="Multiply_138023" type="Eltwise">
+			<data execOrder="208" execTimeMcs="not_executed" originalLayersNames="Multiply_138023" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="62" name="Transpose_7871" type="Permute">
+			<data execOrder="209" execTimeMcs="not_executed" originalLayersNames="Transpose_7871" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="63" name="Reshape_7873" type="Reshape">
+			<data execOrder="210" execTimeMcs="not_executed" originalLayersNames="Reshape_7873" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="64" name="DynamicQuantize_140094" type="DynamicQuantize">
+			<data execOrder="211" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140094" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="65" name="MatMul_7874" type="FullyConnected">
+			<data execOrder="212" execTimeMcs="not_executed" originalLayersNames="MatMul_7874,Add_7875" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="66" name="RMS_7876" type="rms">
+			<data execOrder="213" execTimeMcs="not_executed" originalLayersNames="RMS_7876,MatMul_7877_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="67" name="DynamicQuantize_140100" type="DynamicQuantize">
+			<data execOrder="215" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140100" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="68" name="DynamicQuantize_140106" type="DynamicQuantize">
+			<data execOrder="214" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140106" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="69" name="MatMul_7878" type="FullyConnected">
+			<data execOrder="216" execTimeMcs="not_executed" originalLayersNames="MatMul_7878" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="70" name="MatMul_7877" type="FullyConnected">
+			<data execOrder="217" execTimeMcs="not_executed" originalLayersNames="MatMul_7877,MatMul_7877_scale_up,Swish_7879,Multiply_7880_mm" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="71" name="DynamicQuantize_140112" type="DynamicQuantize">
+			<data execOrder="218" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140112" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="72" name="MatMul_7881" type="FullyConnected">
+			<data execOrder="219" execTimeMcs="not_executed" originalLayersNames="MatMul_7881,Add_7882" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="73" name="RMS_7883" type="rms">
+			<data execOrder="220" execTimeMcs="not_executed" originalLayersNames="RMS_7883" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="74" name="MatMul_7885_scale_down" type="Eltwise">
+			<data execOrder="221" execTimeMcs="not_executed" originalLayersNames="MatMul_7885_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="75" name="DynamicQuantize_140118" type="DynamicQuantize">
+			<data execOrder="223" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140118" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="76" name="MatMul_7885" type="FullyConnected">
+			<data execOrder="225" execTimeMcs="not_executed" originalLayersNames="MatMul_7885" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="77" name="Reshape_7888" type="Reshape">
+			<data execOrder="228" execTimeMcs="not_executed" originalLayersNames="Reshape_7888" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="78" name="Transpose_7889" type="Permute">
+			<data execOrder="231" execTimeMcs="not_executed" originalLayersNames="Transpose_7889" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="79" name="RMS_7894" type="rms">
+			<data execOrder="234" execTimeMcs="not_executed" originalLayersNames="RMS_7894" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="80" name="RoPE_8056" type="RoPE">
+			<data execOrder="237" execTimeMcs="not_executed" originalLayersNames="RoPE_8056" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="81" name="Concat_7884" type="Concat">
+			<data execOrder="222" execTimeMcs="not_executed" originalLayersNames="Concat_7884" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="concatenation_gpu_simple_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="82" name="MatMul_7886_scale_down" type="Eltwise">
+			<data execOrder="224" execTimeMcs="not_executed" originalLayersNames="MatMul_7886_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="83" name="DynamicQuantize_140124" type="DynamicQuantize">
+			<data execOrder="227" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140124" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="84" name="MatMul_7886" type="FullyConnected">
+			<data execOrder="230" execTimeMcs="not_executed" originalLayersNames="MatMul_7886" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="85" name="Reshape_7890" type="Reshape">
+			<data execOrder="233" execTimeMcs="not_executed" originalLayersNames="Reshape_7890" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="86" name="Transpose_7891" type="Permute">
+			<data execOrder="236" execTimeMcs="not_executed" originalLayersNames="Transpose_7891" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="87" name="RMS_7895" type="rms">
+			<data execOrder="239" execTimeMcs="not_executed" originalLayersNames="RMS_7895" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="88" name="RoPE_8059" type="RoPE">
+			<data execOrder="240" execTimeMcs="not_executed" originalLayersNames="RoPE_8059" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="89" name="Unsqueeze_8060" type="Reshape">
+			<data execOrder="241" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_8060" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="90" name="ShapeOf_132007" type="shape_of">
+			<data execOrder="242" execTimeMcs="not_executed" originalLayersNames="ShapeOf_132007" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="shape_of_cpu_impl__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>4</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="91" name="Gather_132010" type="Gather">
+			<data execOrder="243" execTimeMcs="not_executed" originalLayersNames="Gather_132010" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="gather_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>4</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="92" name="Concat_8069" type="Concat">
+			<data execOrder="244" execTimeMcs="not_executed" originalLayersNames="Concat_8069" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="concatenation_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>1</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="I32">
+					<dim>5</dim>
+				</port>
+				<port id="3" precision="I32">
+					<dim>5</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="93" name="Broadcast_8070" type="broadcast">
+			<data execOrder="246" execTimeMcs="not_executed" originalLayersNames="Broadcast_8070" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="94" name="Reshape_8074" type="Reshape">
+			<data execOrder="247" execTimeMcs="not_executed" originalLayersNames="Reshape_8074" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="95" name="DynamicQuantize_140130" type="DynamicQuantize">
+			<data execOrder="226" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140130" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="96" name="MatMul_7887" type="FullyConnected">
+			<data execOrder="229" execTimeMcs="not_executed" originalLayersNames="MatMul_7887" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="97" name="Reshape_7892" type="Reshape">
+			<data execOrder="232" execTimeMcs="not_executed" originalLayersNames="Reshape_7892" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="98" name="Transpose_7893" type="Permute">
+			<data execOrder="235" execTimeMcs="not_executed" originalLayersNames="Transpose_7893" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="99" name="Unsqueeze_8075" type="Reshape">
+			<data execOrder="238" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_8075" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="100" name="Broadcast_8085" type="broadcast">
+			<data execOrder="245" execTimeMcs="not_executed" originalLayersNames="Broadcast_8085,Multiply_138028" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="101" name="Reshape_8089" type="Reshape">
+			<data execOrder="248" execTimeMcs="not_executed" originalLayersNames="Reshape_8089" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="102" name="ScaledDotProductAttention_8091" type="scaled_dot_product_attention">
+			<data execOrder="249" execTimeMcs="not_executed" originalLayersNames="ScaledDotProductAttention_8091" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::sdpa::opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="103" name="Multiply_138033" type="Eltwise">
+			<data execOrder="250" execTimeMcs="not_executed" originalLayersNames="Multiply_138033" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="104" name="Transpose_8092" type="Permute">
+			<data execOrder="251" execTimeMcs="not_executed" originalLayersNames="Transpose_8092" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="105" name="Reshape_8093" type="Reshape">
+			<data execOrder="252" execTimeMcs="not_executed" originalLayersNames="Reshape_8093" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="106" name="DynamicQuantize_140136" type="DynamicQuantize">
+			<data execOrder="253" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140136" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="107" name="MatMul_8094" type="FullyConnected">
+			<data execOrder="254" execTimeMcs="not_executed" originalLayersNames="MatMul_8094,Add_8095" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="108" name="RMS_8096" type="rms">
+			<data execOrder="255" execTimeMcs="not_executed" originalLayersNames="RMS_8096,MatMul_8097_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="109" name="DynamicQuantize_140142" type="DynamicQuantize">
+			<data execOrder="257" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140142" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="110" name="DynamicQuantize_140148" type="DynamicQuantize">
+			<data execOrder="256" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140148" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="111" name="MatMul_8098" type="FullyConnected">
+			<data execOrder="258" execTimeMcs="not_executed" originalLayersNames="MatMul_8098" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="112" name="MatMul_8097" type="FullyConnected">
+			<data execOrder="259" execTimeMcs="not_executed" originalLayersNames="MatMul_8097,MatMul_8097_scale_up,Swish_8099,Multiply_8100_mm" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="113" name="DynamicQuantize_140154" type="DynamicQuantize">
+			<data execOrder="260" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140154" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="114" name="MatMul_8101" type="FullyConnected">
+			<data execOrder="261" execTimeMcs="not_executed" originalLayersNames="MatMul_8101,Add_8102" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="115" name="RMS_8103" type="rms">
+			<data execOrder="262" execTimeMcs="not_executed" originalLayersNames="RMS_8103" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="116" name="MatMul_8105_scale_down" type="Eltwise">
+			<data execOrder="263" execTimeMcs="not_executed" originalLayersNames="MatMul_8105_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="117" name="DynamicQuantize_140160" type="DynamicQuantize">
+			<data execOrder="265" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140160" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="118" name="MatMul_8105" type="FullyConnected">
+			<data execOrder="267" execTimeMcs="not_executed" originalLayersNames="MatMul_8105" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="119" name="Reshape_8108" type="Reshape">
+			<data execOrder="270" execTimeMcs="not_executed" originalLayersNames="Reshape_8108" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="120" name="Transpose_8109" type="Permute">
+			<data execOrder="273" execTimeMcs="not_executed" originalLayersNames="Transpose_8109" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="121" name="RMS_8114" type="rms">
+			<data execOrder="276" execTimeMcs="not_executed" originalLayersNames="RMS_8114" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="122" name="RoPE_8276" type="RoPE">
+			<data execOrder="279" execTimeMcs="not_executed" originalLayersNames="RoPE_8276" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="123" name="Concat_8104" type="Concat">
+			<data execOrder="264" execTimeMcs="not_executed" originalLayersNames="Concat_8104" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="concatenation_gpu_simple_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="124" name="MatMul_8106_scale_down" type="Eltwise">
+			<data execOrder="266" execTimeMcs="not_executed" originalLayersNames="MatMul_8106_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="125" name="DynamicQuantize_140166" type="DynamicQuantize">
+			<data execOrder="269" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140166" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="126" name="MatMul_8106" type="FullyConnected">
+			<data execOrder="272" execTimeMcs="not_executed" originalLayersNames="MatMul_8106" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="127" name="Reshape_8110" type="Reshape">
+			<data execOrder="275" execTimeMcs="not_executed" originalLayersNames="Reshape_8110" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="128" name="Transpose_8111" type="Permute">
+			<data execOrder="278" execTimeMcs="not_executed" originalLayersNames="Transpose_8111" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="129" name="RMS_8115" type="rms">
+			<data execOrder="281" execTimeMcs="not_executed" originalLayersNames="RMS_8115" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="130" name="RoPE_8279" type="RoPE">
+			<data execOrder="282" execTimeMcs="not_executed" originalLayersNames="RoPE_8279" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="131" name="Unsqueeze_8280" type="Reshape">
+			<data execOrder="283" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_8280" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="132" name="ShapeOf_132026" type="shape_of">
+			<data execOrder="284" execTimeMcs="not_executed" originalLayersNames="ShapeOf_132026" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="shape_of_cpu_impl__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>4</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="133" name="Gather_132029" type="Gather">
+			<data execOrder="285" execTimeMcs="not_executed" originalLayersNames="Gather_132029" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="gather_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>4</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="134" name="Concat_8289" type="Concat">
+			<data execOrder="286" execTimeMcs="not_executed" originalLayersNames="Concat_8289" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="concatenation_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>1</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="I32">
+					<dim>5</dim>
+				</port>
+				<port id="3" precision="I32">
+					<dim>5</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="135" name="Broadcast_8290" type="broadcast">
+			<data execOrder="288" execTimeMcs="not_executed" originalLayersNames="Broadcast_8290" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="136" name="Reshape_8294" type="Reshape">
+			<data execOrder="289" execTimeMcs="not_executed" originalLayersNames="Reshape_8294" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="137" name="DynamicQuantize_140172" type="DynamicQuantize">
+			<data execOrder="268" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140172" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="138" name="MatMul_8107" type="FullyConnected">
+			<data execOrder="271" execTimeMcs="not_executed" originalLayersNames="MatMul_8107" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="139" name="Reshape_8112" type="Reshape">
+			<data execOrder="274" execTimeMcs="not_executed" originalLayersNames="Reshape_8112" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="140" name="Transpose_8113" type="Permute">
+			<data execOrder="277" execTimeMcs="not_executed" originalLayersNames="Transpose_8113" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="141" name="Unsqueeze_8295" type="Reshape">
+			<data execOrder="280" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_8295" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="142" name="Broadcast_8305" type="broadcast">
+			<data execOrder="287" execTimeMcs="not_executed" originalLayersNames="Broadcast_8305,Multiply_138038" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="143" name="Reshape_8309" type="Reshape">
+			<data execOrder="290" execTimeMcs="not_executed" originalLayersNames="Reshape_8309" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="144" name="ScaledDotProductAttention_8311" type="scaled_dot_product_attention">
+			<data execOrder="291" execTimeMcs="not_executed" originalLayersNames="ScaledDotProductAttention_8311" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::sdpa::opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="145" name="Multiply_138043" type="Eltwise">
+			<data execOrder="292" execTimeMcs="not_executed" originalLayersNames="Multiply_138043" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="146" name="Transpose_8312" type="Permute">
+			<data execOrder="293" execTimeMcs="not_executed" originalLayersNames="Transpose_8312" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="147" name="Reshape_8313" type="Reshape">
+			<data execOrder="294" execTimeMcs="not_executed" originalLayersNames="Reshape_8313" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="148" name="DynamicQuantize_140178" type="DynamicQuantize">
+			<data execOrder="295" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140178" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="149" name="MatMul_8314" type="FullyConnected">
+			<data execOrder="296" execTimeMcs="not_executed" originalLayersNames="MatMul_8314,Add_8315" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="150" name="RMS_8316" type="rms">
+			<data execOrder="297" execTimeMcs="not_executed" originalLayersNames="RMS_8316,MatMul_8317_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="151" name="DynamicQuantize_140184" type="DynamicQuantize">
+			<data execOrder="299" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140184" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="152" name="DynamicQuantize_140190" type="DynamicQuantize">
+			<data execOrder="298" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140190" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="153" name="MatMul_8318" type="FullyConnected">
+			<data execOrder="300" execTimeMcs="not_executed" originalLayersNames="MatMul_8318" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="154" name="MatMul_8317" type="FullyConnected">
+			<data execOrder="301" execTimeMcs="not_executed" originalLayersNames="MatMul_8317,MatMul_8317_scale_up,Swish_8319,Multiply_8320_mm" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="155" name="DynamicQuantize_140196" type="DynamicQuantize">
+			<data execOrder="302" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140196" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="156" name="MatMul_8321" type="FullyConnected">
+			<data execOrder="303" execTimeMcs="not_executed" originalLayersNames="MatMul_8321,Add_8322" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="157" name="RMS_8323" type="rms">
+			<data execOrder="304" execTimeMcs="not_executed" originalLayersNames="RMS_8323" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="158" name="MatMul_8325_scale_down" type="Eltwise">
+			<data execOrder="305" execTimeMcs="not_executed" originalLayersNames="MatMul_8325_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="159" name="DynamicQuantize_140202" type="DynamicQuantize">
+			<data execOrder="307" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140202" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="160" name="MatMul_8325" type="FullyConnected">
+			<data execOrder="309" execTimeMcs="not_executed" originalLayersNames="MatMul_8325" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="161" name="Reshape_8328" type="Reshape">
+			<data execOrder="312" execTimeMcs="not_executed" originalLayersNames="Reshape_8328" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="162" name="Transpose_8329" type="Permute">
+			<data execOrder="315" execTimeMcs="not_executed" originalLayersNames="Transpose_8329" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="163" name="RMS_8334" type="rms">
+			<data execOrder="318" execTimeMcs="not_executed" originalLayersNames="RMS_8334" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="164" name="RoPE_8496" type="RoPE">
+			<data execOrder="321" execTimeMcs="not_executed" originalLayersNames="RoPE_8496" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="165" name="Concat_8324" type="Concat">
+			<data execOrder="306" execTimeMcs="not_executed" originalLayersNames="Concat_8324" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="concatenation_gpu_simple_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="166" name="MatMul_8326_scale_down" type="Eltwise">
+			<data execOrder="308" execTimeMcs="not_executed" originalLayersNames="MatMul_8326_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="167" name="DynamicQuantize_140208" type="DynamicQuantize">
+			<data execOrder="311" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140208" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="168" name="MatMul_8326" type="FullyConnected">
+			<data execOrder="314" execTimeMcs="not_executed" originalLayersNames="MatMul_8326" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="169" name="Reshape_8330" type="Reshape">
+			<data execOrder="317" execTimeMcs="not_executed" originalLayersNames="Reshape_8330" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="170" name="Transpose_8331" type="Permute">
+			<data execOrder="320" execTimeMcs="not_executed" originalLayersNames="Transpose_8331" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="171" name="RMS_8335" type="rms">
+			<data execOrder="323" execTimeMcs="not_executed" originalLayersNames="RMS_8335" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="172" name="RoPE_8499" type="RoPE">
+			<data execOrder="324" execTimeMcs="not_executed" originalLayersNames="RoPE_8499" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="173" name="Unsqueeze_8500" type="Reshape">
+			<data execOrder="325" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_8500" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="174" name="ShapeOf_132045" type="shape_of">
+			<data execOrder="326" execTimeMcs="not_executed" originalLayersNames="ShapeOf_132045" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="shape_of_cpu_impl__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>4</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="175" name="Gather_132048" type="Gather">
+			<data execOrder="327" execTimeMcs="not_executed" originalLayersNames="Gather_132048" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="gather_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>4</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="176" name="Concat_8509" type="Concat">
+			<data execOrder="328" execTimeMcs="not_executed" originalLayersNames="Concat_8509" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="concatenation_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>1</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="I32">
+					<dim>5</dim>
+				</port>
+				<port id="3" precision="I32">
+					<dim>5</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="177" name="Broadcast_8510" type="broadcast">
+			<data execOrder="330" execTimeMcs="not_executed" originalLayersNames="Broadcast_8510" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="178" name="Reshape_8514" type="Reshape">
+			<data execOrder="331" execTimeMcs="not_executed" originalLayersNames="Reshape_8514" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="179" name="DynamicQuantize_140214" type="DynamicQuantize">
+			<data execOrder="310" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140214" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="180" name="MatMul_8327" type="FullyConnected">
+			<data execOrder="313" execTimeMcs="not_executed" originalLayersNames="MatMul_8327" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="181" name="Reshape_8332" type="Reshape">
+			<data execOrder="316" execTimeMcs="not_executed" originalLayersNames="Reshape_8332" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="182" name="Transpose_8333" type="Permute">
+			<data execOrder="319" execTimeMcs="not_executed" originalLayersNames="Transpose_8333" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="183" name="Unsqueeze_8515" type="Reshape">
+			<data execOrder="322" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_8515" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="184" name="Broadcast_8525" type="broadcast">
+			<data execOrder="329" execTimeMcs="not_executed" originalLayersNames="Broadcast_8525,Multiply_138048" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="185" name="Reshape_8529" type="Reshape">
+			<data execOrder="332" execTimeMcs="not_executed" originalLayersNames="Reshape_8529" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="186" name="ScaledDotProductAttention_8531" type="scaled_dot_product_attention">
+			<data execOrder="333" execTimeMcs="not_executed" originalLayersNames="ScaledDotProductAttention_8531" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::sdpa::opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="187" name="Multiply_138053" type="Eltwise">
+			<data execOrder="334" execTimeMcs="not_executed" originalLayersNames="Multiply_138053" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="188" name="Transpose_8532" type="Permute">
+			<data execOrder="335" execTimeMcs="not_executed" originalLayersNames="Transpose_8532" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="189" name="Reshape_8533" type="Reshape">
+			<data execOrder="336" execTimeMcs="not_executed" originalLayersNames="Reshape_8533" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="190" name="DynamicQuantize_140220" type="DynamicQuantize">
+			<data execOrder="337" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140220" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="191" name="MatMul_8534" type="FullyConnected">
+			<data execOrder="338" execTimeMcs="not_executed" originalLayersNames="MatMul_8534,Add_8535" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="192" name="RMS_8536" type="rms">
+			<data execOrder="339" execTimeMcs="not_executed" originalLayersNames="RMS_8536,MatMul_8537_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="193" name="DynamicQuantize_140226" type="DynamicQuantize">
+			<data execOrder="341" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140226" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="194" name="DynamicQuantize_140232" type="DynamicQuantize">
+			<data execOrder="340" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140232" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="195" name="MatMul_8538" type="FullyConnected">
+			<data execOrder="342" execTimeMcs="not_executed" originalLayersNames="MatMul_8538" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="196" name="MatMul_8537" type="FullyConnected">
+			<data execOrder="343" execTimeMcs="not_executed" originalLayersNames="MatMul_8537,MatMul_8537_scale_up,Swish_8539,Multiply_8540_mm" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="197" name="DynamicQuantize_140238" type="DynamicQuantize">
+			<data execOrder="344" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140238" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="198" name="MatMul_8541" type="FullyConnected">
+			<data execOrder="345" execTimeMcs="not_executed" originalLayersNames="MatMul_8541,Add_8542" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="199" name="RMS_8543" type="rms">
+			<data execOrder="346" execTimeMcs="not_executed" originalLayersNames="RMS_8543" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="200" name="MatMul_8545_scale_down" type="Eltwise">
+			<data execOrder="347" execTimeMcs="not_executed" originalLayersNames="MatMul_8545_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="201" name="DynamicQuantize_140244" type="DynamicQuantize">
+			<data execOrder="349" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140244" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="202" name="MatMul_8545" type="FullyConnected">
+			<data execOrder="351" execTimeMcs="not_executed" originalLayersNames="MatMul_8545" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="203" name="Reshape_8548" type="Reshape">
+			<data execOrder="354" execTimeMcs="not_executed" originalLayersNames="Reshape_8548" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="204" name="Transpose_8549" type="Permute">
+			<data execOrder="357" execTimeMcs="not_executed" originalLayersNames="Transpose_8549" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="205" name="RMS_8554" type="rms">
+			<data execOrder="360" execTimeMcs="not_executed" originalLayersNames="RMS_8554" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="206" name="RoPE_8716" type="RoPE">
+			<data execOrder="363" execTimeMcs="not_executed" originalLayersNames="RoPE_8716" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="207" name="Concat_8544" type="Concat">
+			<data execOrder="348" execTimeMcs="not_executed" originalLayersNames="Concat_8544" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="concatenation_gpu_simple_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="208" name="MatMul_8546_scale_down" type="Eltwise">
+			<data execOrder="350" execTimeMcs="not_executed" originalLayersNames="MatMul_8546_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="209" name="DynamicQuantize_140250" type="DynamicQuantize">
+			<data execOrder="353" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140250" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="210" name="MatMul_8546" type="FullyConnected">
+			<data execOrder="356" execTimeMcs="not_executed" originalLayersNames="MatMul_8546" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="211" name="Reshape_8550" type="Reshape">
+			<data execOrder="359" execTimeMcs="not_executed" originalLayersNames="Reshape_8550" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="212" name="Transpose_8551" type="Permute">
+			<data execOrder="362" execTimeMcs="not_executed" originalLayersNames="Transpose_8551" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="213" name="RMS_8555" type="rms">
+			<data execOrder="365" execTimeMcs="not_executed" originalLayersNames="RMS_8555" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="214" name="RoPE_8719" type="RoPE">
+			<data execOrder="366" execTimeMcs="not_executed" originalLayersNames="RoPE_8719" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::rope::opt___f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>64</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="215" name="Unsqueeze_8720" type="Reshape">
+			<data execOrder="367" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_8720" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="216" name="ShapeOf_132064" type="shape_of">
+			<data execOrder="368" execTimeMcs="not_executed" originalLayersNames="ShapeOf_132064" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="shape_of_cpu_impl__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>4</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="217" name="Gather_132067" type="Gather">
+			<data execOrder="369" execTimeMcs="not_executed" originalLayersNames="Gather_132067" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="gather_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>4</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="218" name="Concat_8729" type="Concat">
+			<data execOrder="370" execTimeMcs="not_executed" originalLayersNames="Concat_8729" outputLayouts="bfyx" outputPrecisions="i32" primitiveType="concatenation_cpu_impl__i32" runtimePrecision="i32" />
+			<input>
+				<port id="0" precision="I32">
+					<dim>1</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="I32">
+					<dim>5</dim>
+				</port>
+				<port id="3" precision="I32">
+					<dim>5</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="219" name="Broadcast_8730" type="broadcast">
+			<data execOrder="372" execTimeMcs="not_executed" originalLayersNames="Broadcast_8730" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="220" name="Reshape_8734" type="Reshape">
+			<data execOrder="373" execTimeMcs="not_executed" originalLayersNames="Reshape_8734" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="221" name="DynamicQuantize_140256" type="DynamicQuantize">
+			<data execOrder="352" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140256" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="222" name="MatMul_8547" type="FullyConnected">
+			<data execOrder="355" execTimeMcs="not_executed" originalLayersNames="MatMul_8547" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="223" name="Reshape_8552" type="Reshape">
+			<data execOrder="358" execTimeMcs="not_executed" originalLayersNames="Reshape_8552" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>1024</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="224" name="Transpose_8553" type="Permute">
+			<data execOrder="361" execTimeMcs="not_executed" originalLayersNames="Transpose_8553" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="225" name="Unsqueeze_8735" type="Reshape">
+			<data execOrder="364" execTimeMcs="not_executed" originalLayersNames="Unsqueeze_8735" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="226" name="Broadcast_8745" type="broadcast">
+			<data execOrder="371" execTimeMcs="not_executed" originalLayersNames="Broadcast_8745,Multiply_138058" outputLayouts="bfzyx" outputPrecisions="f16" primitiveType="broadcast_gpu_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>1</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="I32">
+					<dim>5</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="227" name="Reshape_8749" type="Reshape">
+			<data execOrder="374" execTimeMcs="not_executed" originalLayersNames="Reshape_8749" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>8</dim>
+					<dim>4</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="228" name="ScaledDotProductAttention_8751" type="scaled_dot_product_attention">
+			<data execOrder="375" execTimeMcs="not_executed" originalLayersNames="ScaledDotProductAttention_8751" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="ocl::sdpa::opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="229" name="Multiply_138063" type="Eltwise">
+			<data execOrder="376" execTimeMcs="not_executed" originalLayersNames="Multiply_138063" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="generic_eltwise_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="230" name="Transpose_8752" type="Permute">
+			<data execOrder="377" execTimeMcs="not_executed" originalLayersNames="Transpose_8752" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="permute_ref__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>-1</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="231" name="Reshape_8753" type="Reshape">
+			<data execOrder="378" execTimeMcs="not_executed" originalLayersNames="Reshape_8753" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>32</dim>
+					<dim>128</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="232" name="DynamicQuantize_140262" type="DynamicQuantize">
+			<data execOrder="379" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140262" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="233" name="MatMul_8754" type="FullyConnected">
+			<data execOrder="380" execTimeMcs="not_executed" originalLayersNames="MatMul_8754,Add_8755" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>4096</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="4" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="234" name="RMS_8756" type="rms">
+			<data execOrder="381" execTimeMcs="not_executed" originalLayersNames="RMS_8756,MatMul_8757_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="235" name="DynamicQuantize_140268" type="DynamicQuantize">
+			<data execOrder="383" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140268" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="236" name="DynamicQuantize_140274" type="DynamicQuantize">
+			<data execOrder="382" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140274" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="237" name="MatMul_8758" type="FullyConnected">
+			<data execOrder="384" execTimeMcs="not_executed" originalLayersNames="MatMul_8758" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="238" name="MatMul_8757" type="FullyConnected">
+			<data execOrder="385" execTimeMcs="not_executed" originalLayersNames="MatMul_8757,MatMul_8757_scale_up,Swish_8759,Multiply_8760_mm" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="239" name="DynamicQuantize_140280" type="DynamicQuantize">
+			<data execOrder="386" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140280" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="240" name="MatMul_8761" type="FullyConnected">
+			<data execOrder="387" execTimeMcs="not_executed" originalLayersNames="MatMul_8761,Add_8762" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>9728</dim>
+				</port>
+				<port id="2" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="3" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="241" name="RMS_8763" type="rms">
+			<data execOrder="388" execTimeMcs="not_executed" originalLayersNames="RMS_8763,MatMul_8764_scale_down" outputLayouts="bfyx" outputPrecisions="f16" primitiveType="rms_gpu_bfyx_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="242" name="DynamicQuantize_140286" type="DynamicQuantize">
+			<data execOrder="389" execTimeMcs="not_executed" group_sizes="1, 1, -1" originalLayersNames="DynamicQuantize_140286" outputLayouts="bfyx" outputPrecisions="i8" primitiveType="dynamic_quantize_gpu_opt__f16" runtimePrecision="f16" />
+			<input>
+				<port id="0" precision="FP16">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="2" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="243" name="logits" type="FullyConnected">
+			<data execOrder="390" execTimeMcs="not_executed" originalLayersNames="MatMul_8764" outputLayouts="bfyx" outputPrecisions="f32" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+				<port id="1" precision="I8">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>2560</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP32">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>248320</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="244" name="logits_result" type="Result">
+			<data execOrder="390" execTimeMcs="not_executed" originalLayersNames="MatMul_8764" outputLayouts="bfyx" outputPrecisions="f32" primitiveType="undef" runtimePrecision="i8" />
+			<input>
+				<port id="0" precision="FP32">
+					<dim>-1</dim>
+					<dim>-1</dim>
+					<dim>248320</dim>
+				</port>
+			</input>
+		</layer>
+	</layers>
+	<edges>
+		<edge from-layer="0" from-port="0" to-layer="31" to-port="0" />
+		<edge from-layer="1" from-port="0" to-layer="12" to-port="0" />
+		<edge from-layer="2" from-port="0" to-layer="3" to-port="0" />
+		<edge from-layer="3" from-port="1" to-layer="4" to-port="0" />
+		<edge from-layer="4" from-port="1" to-layer="5" to-port="0" />
+		<edge from-layer="4" from-port="1" to-layer="65" to-port="2" />
+		<edge from-layer="5" from-port="1" to-layer="6" to-port="0" />
+		<edge from-layer="5" from-port="1" to-layer="35" to-port="1" />
+		<edge from-layer="6" from-port="1" to-layer="7" to-port="0" />
+		<edge from-layer="6" from-port="1" to-layer="19" to-port="0" />
+		<edge from-layer="7" from-port="1" to-layer="8" to-port="1" />
+		<edge from-layer="7" from-port="1" to-layer="8" to-port="0" />
+		<edge from-layer="8" from-port="2" to-layer="9" to-port="0" />
+		<edge from-layer="9" from-port="1" to-layer="10" to-port="0" />
+		<edge from-layer="10" from-port="1" to-layer="11" to-port="0" />
+		<edge from-layer="11" from-port="1" to-layer="30" to-port="0" />
+		<edge from-layer="11" from-port="1" to-layer="46" to-port="0" />
+		<edge from-layer="12" from-port="1" to-layer="13" to-port="0" />
+		<edge from-layer="13" from-port="1" to-layer="14" to-port="0" />
+		<edge from-layer="14" from-port="1" to-layer="15" to-port="0" />
+		<edge from-layer="14" from-port="1" to-layer="27" to-port="0" />
+		<edge from-layer="15" from-port="1" to-layer="16" to-port="0" />
+		<edge from-layer="15" from-port="1" to-layer="25" to-port="0" />
+		<edge from-layer="15" from-port="1" to-layer="42" to-port="0" />
+		<edge from-layer="16" from-port="1" to-layer="17" to-port="0" />
+		<edge from-layer="17" from-port="1" to-layer="18" to-port="0" />
+		<edge from-layer="18" from-port="1" to-layer="24" to-port="1" />
+		<edge from-layer="18" from-port="1" to-layer="23" to-port="0" />
+		<edge from-layer="19" from-port="1" to-layer="20" to-port="0" />
+		<edge from-layer="20" from-port="1" to-layer="21" to-port="0" />
+		<edge from-layer="21" from-port="1" to-layer="22" to-port="0" />
+		<edge from-layer="22" from-port="1" to-layer="23" to-port="1" />
+		<edge from-layer="23" from-port="2" to-layer="24" to-port="0" />
+		<edge from-layer="24" from-port="2" to-layer="25" to-port="1" />
+		<edge from-layer="24" from-port="2" to-layer="28" to-port="1" />
+		<edge from-layer="25" from-port="2" to-layer="26" to-port="0" />
+		<edge from-layer="26" from-port="1" to-layer="30" to-port="1" />
+		<edge from-layer="26" from-port="1" to-layer="122" to-port="1" />
+		<edge from-layer="26" from-port="1" to-layer="164" to-port="1" />
+		<edge from-layer="26" from-port="1" to-layer="80" to-port="1" />
+		<edge from-layer="26" from-port="1" to-layer="206" to-port="1" />
+		<edge from-layer="27" from-port="1" to-layer="28" to-port="0" />
+		<edge from-layer="27" from-port="1" to-layer="43" to-port="0" />
+		<edge from-layer="28" from-port="2" to-layer="29" to-port="0" />
+		<edge from-layer="29" from-port="1" to-layer="164" to-port="2" />
+		<edge from-layer="29" from-port="1" to-layer="30" to-port="2" />
+		<edge from-layer="29" from-port="1" to-layer="122" to-port="2" />
+		<edge from-layer="29" from-port="1" to-layer="80" to-port="2" />
+		<edge from-layer="29" from-port="1" to-layer="206" to-port="2" />
+		<edge from-layer="30" from-port="3" to-layer="60" to-port="0" />
+		<edge from-layer="31" from-port="1" to-layer="32" to-port="0" />
+		<edge from-layer="32" from-port="1" to-layer="33" to-port="1" />
+		<edge from-layer="32" from-port="1" to-layer="33" to-port="0" />
+		<edge from-layer="33" from-port="2" to-layer="34" to-port="0" />
+		<edge from-layer="34" from-port="1" to-layer="35" to-port="0" />
+		<edge from-layer="34" from-port="1" to-layer="123" to-port="0" />
+		<edge from-layer="34" from-port="1" to-layer="165" to-port="0" />
+		<edge from-layer="34" from-port="1" to-layer="81" to-port="0" />
+		<edge from-layer="34" from-port="1" to-layer="207" to-port="0" />
+		<edge from-layer="35" from-port="2" to-layer="36" to-port="0" />
+		<edge from-layer="36" from-port="1" to-layer="53" to-port="0" />
+		<edge from-layer="36" from-port="1" to-layer="37" to-port="0" />
+		<edge from-layer="37" from-port="1" to-layer="38" to-port="0" />
+		<edge from-layer="37" from-port="1" to-layer="38" to-port="1" />
+		<edge from-layer="38" from-port="2" to-layer="39" to-port="0" />
+		<edge from-layer="39" from-port="1" to-layer="40" to-port="0" />
+		<edge from-layer="40" from-port="1" to-layer="41" to-port="0" />
+		<edge from-layer="41" from-port="1" to-layer="44" to-port="0" />
+		<edge from-layer="42" from-port="1" to-layer="44" to-port="1" />
+		<edge from-layer="42" from-port="1" to-layer="130" to-port="1" />
+		<edge from-layer="42" from-port="1" to-layer="88" to-port="1" />
+		<edge from-layer="42" from-port="1" to-layer="172" to-port="1" />
+		<edge from-layer="42" from-port="1" to-layer="214" to-port="1" />
+		<edge from-layer="43" from-port="1" to-layer="88" to-port="2" />
+		<edge from-layer="43" from-port="1" to-layer="44" to-port="2" />
+		<edge from-layer="43" from-port="1" to-layer="130" to-port="2" />
+		<edge from-layer="43" from-port="1" to-layer="214" to-port="2" />
+		<edge from-layer="43" from-port="1" to-layer="172" to-port="2" />
+		<edge from-layer="44" from-port="3" to-layer="45" to-port="0" />
+		<edge from-layer="44" from-port="3" to-layer="48" to-port="0" />
+		<edge from-layer="45" from-port="1" to-layer="51" to-port="0" />
+		<edge from-layer="46" from-port="1" to-layer="47" to-port="0" />
+		<edge from-layer="47" from-port="1" to-layer="176" to-port="0" />
+		<edge from-layer="47" from-port="1" to-layer="50" to-port="0" />
+		<edge from-layer="47" from-port="1" to-layer="218" to-port="0" />
+		<edge from-layer="47" from-port="1" to-layer="92" to-port="0" />
+		<edge from-layer="47" from-port="1" to-layer="134" to-port="0" />
+		<edge from-layer="48" from-port="1" to-layer="49" to-port="0" />
+		<edge from-layer="49" from-port="1" to-layer="50" to-port="1" />
+		<edge from-layer="50" from-port="2" to-layer="51" to-port="1" />
+		<edge from-layer="50" from-port="2" to-layer="58" to-port="1" />
+		<edge from-layer="51" from-port="2" to-layer="52" to-port="0" />
+		<edge from-layer="52" from-port="1" to-layer="60" to-port="1" />
+		<edge from-layer="53" from-port="1" to-layer="54" to-port="0" />
+		<edge from-layer="53" from-port="1" to-layer="54" to-port="1" />
+		<edge from-layer="54" from-port="2" to-layer="55" to-port="0" />
+		<edge from-layer="55" from-port="1" to-layer="56" to-port="0" />
+		<edge from-layer="56" from-port="1" to-layer="57" to-port="0" />
+		<edge from-layer="57" from-port="1" to-layer="58" to-port="0" />
+		<edge from-layer="58" from-port="2" to-layer="59" to-port="0" />
+		<edge from-layer="59" from-port="1" to-layer="60" to-port="2" />
+		<edge from-layer="60" from-port="3" to-layer="61" to-port="0" />
+		<edge from-layer="61" from-port="1" to-layer="62" to-port="0" />
+		<edge from-layer="62" from-port="1" to-layer="63" to-port="0" />
+		<edge from-layer="63" from-port="1" to-layer="64" to-port="0" />
+		<edge from-layer="64" from-port="1" to-layer="65" to-port="0" />
+		<edge from-layer="64" from-port="1" to-layer="65" to-port="1" />
+		<edge from-layer="65" from-port="3" to-layer="66" to-port="0" />
+		<edge from-layer="65" from-port="3" to-layer="72" to-port="2" />
+		<edge from-layer="66" from-port="1" to-layer="67" to-port="0" />
+		<edge from-layer="66" from-port="1" to-layer="68" to-port="0" />
+		<edge from-layer="67" from-port="1" to-layer="70" to-port="1" />
+		<edge from-layer="67" from-port="1" to-layer="70" to-port="0" />
+		<edge from-layer="68" from-port="1" to-layer="69" to-port="1" />
+		<edge from-layer="68" from-port="1" to-layer="69" to-port="0" />
+		<edge from-layer="69" from-port="2" to-layer="70" to-port="2" />
+		<edge from-layer="70" from-port="3" to-layer="71" to-port="0" />
+		<edge from-layer="71" from-port="1" to-layer="72" to-port="1" />
+		<edge from-layer="71" from-port="1" to-layer="72" to-port="0" />
+		<edge from-layer="72" from-port="3" to-layer="73" to-port="0" />
+		<edge from-layer="72" from-port="3" to-layer="107" to-port="2" />
+		<edge from-layer="73" from-port="1" to-layer="81" to-port="1" />
+		<edge from-layer="73" from-port="1" to-layer="74" to-port="0" />
+		<edge from-layer="74" from-port="1" to-layer="75" to-port="0" />
+		<edge from-layer="75" from-port="1" to-layer="76" to-port="1" />
+		<edge from-layer="75" from-port="1" to-layer="76" to-port="0" />
+		<edge from-layer="76" from-port="2" to-layer="77" to-port="0" />
+		<edge from-layer="77" from-port="1" to-layer="78" to-port="0" />
+		<edge from-layer="78" from-port="1" to-layer="79" to-port="0" />
+		<edge from-layer="79" from-port="1" to-layer="80" to-port="0" />
+		<edge from-layer="80" from-port="3" to-layer="102" to-port="0" />
+		<edge from-layer="81" from-port="2" to-layer="82" to-port="0" />
+		<edge from-layer="82" from-port="1" to-layer="83" to-port="0" />
+		<edge from-layer="82" from-port="1" to-layer="95" to-port="0" />
+		<edge from-layer="83" from-port="1" to-layer="84" to-port="0" />
+		<edge from-layer="83" from-port="1" to-layer="84" to-port="1" />
+		<edge from-layer="84" from-port="2" to-layer="85" to-port="0" />
+		<edge from-layer="85" from-port="1" to-layer="86" to-port="0" />
+		<edge from-layer="86" from-port="1" to-layer="87" to-port="0" />
+		<edge from-layer="87" from-port="1" to-layer="88" to-port="0" />
+		<edge from-layer="88" from-port="3" to-layer="89" to-port="0" />
+		<edge from-layer="88" from-port="3" to-layer="90" to-port="0" />
+		<edge from-layer="89" from-port="1" to-layer="93" to-port="0" />
+		<edge from-layer="90" from-port="1" to-layer="91" to-port="0" />
+		<edge from-layer="91" from-port="1" to-layer="92" to-port="1" />
+		<edge from-layer="92" from-port="2" to-layer="93" to-port="1" />
+		<edge from-layer="92" from-port="2" to-layer="100" to-port="1" />
+		<edge from-layer="93" from-port="2" to-layer="94" to-port="0" />
+		<edge from-layer="94" from-port="1" to-layer="102" to-port="1" />
+		<edge from-layer="95" from-port="1" to-layer="96" to-port="0" />
+		<edge from-layer="95" from-port="1" to-layer="96" to-port="1" />
+		<edge from-layer="96" from-port="2" to-layer="97" to-port="0" />
+		<edge from-layer="97" from-port="1" to-layer="98" to-port="0" />
+		<edge from-layer="98" from-port="1" to-layer="99" to-port="0" />
+		<edge from-layer="99" from-port="1" to-layer="100" to-port="0" />
+		<edge from-layer="100" from-port="2" to-layer="101" to-port="0" />
+		<edge from-layer="101" from-port="1" to-layer="102" to-port="2" />
+		<edge from-layer="102" from-port="3" to-layer="103" to-port="0" />
+		<edge from-layer="103" from-port="1" to-layer="104" to-port="0" />
+		<edge from-layer="104" from-port="1" to-layer="105" to-port="0" />
+		<edge from-layer="105" from-port="1" to-layer="106" to-port="0" />
+		<edge from-layer="106" from-port="1" to-layer="107" to-port="1" />
+		<edge from-layer="106" from-port="1" to-layer="107" to-port="0" />
+		<edge from-layer="107" from-port="3" to-layer="108" to-port="0" />
+		<edge from-layer="107" from-port="3" to-layer="114" to-port="2" />
+		<edge from-layer="108" from-port="1" to-layer="109" to-port="0" />
+		<edge from-layer="108" from-port="1" to-layer="110" to-port="0" />
+		<edge from-layer="109" from-port="1" to-layer="112" to-port="1" />
+		<edge from-layer="109" from-port="1" to-layer="112" to-port="0" />
+		<edge from-layer="110" from-port="1" to-layer="111" to-port="1" />
+		<edge from-layer="110" from-port="1" to-layer="111" to-port="0" />
+		<edge from-layer="111" from-port="2" to-layer="112" to-port="2" />
+		<edge from-layer="112" from-port="3" to-layer="113" to-port="0" />
+		<edge from-layer="113" from-port="1" to-layer="114" to-port="0" />
+		<edge from-layer="113" from-port="1" to-layer="114" to-port="1" />
+		<edge from-layer="114" from-port="3" to-layer="149" to-port="2" />
+		<edge from-layer="114" from-port="3" to-layer="115" to-port="0" />
+		<edge from-layer="115" from-port="1" to-layer="123" to-port="1" />
+		<edge from-layer="115" from-port="1" to-layer="116" to-port="0" />
+		<edge from-layer="116" from-port="1" to-layer="117" to-port="0" />
+		<edge from-layer="117" from-port="1" to-layer="118" to-port="1" />
+		<edge from-layer="117" from-port="1" to-layer="118" to-port="0" />
+		<edge from-layer="118" from-port="2" to-layer="119" to-port="0" />
+		<edge from-layer="119" from-port="1" to-layer="120" to-port="0" />
+		<edge from-layer="120" from-port="1" to-layer="121" to-port="0" />
+		<edge from-layer="121" from-port="1" to-layer="122" to-port="0" />
+		<edge from-layer="122" from-port="3" to-layer="144" to-port="0" />
+		<edge from-layer="123" from-port="2" to-layer="124" to-port="0" />
+		<edge from-layer="124" from-port="1" to-layer="125" to-port="0" />
+		<edge from-layer="124" from-port="1" to-layer="137" to-port="0" />
+		<edge from-layer="125" from-port="1" to-layer="126" to-port="1" />
+		<edge from-layer="125" from-port="1" to-layer="126" to-port="0" />
+		<edge from-layer="126" from-port="2" to-layer="127" to-port="0" />
+		<edge from-layer="127" from-port="1" to-layer="128" to-port="0" />
+		<edge from-layer="128" from-port="1" to-layer="129" to-port="0" />
+		<edge from-layer="129" from-port="1" to-layer="130" to-port="0" />
+		<edge from-layer="130" from-port="3" to-layer="132" to-port="0" />
+		<edge from-layer="130" from-port="3" to-layer="131" to-port="0" />
+		<edge from-layer="131" from-port="1" to-layer="135" to-port="0" />
+		<edge from-layer="132" from-port="1" to-layer="133" to-port="0" />
+		<edge from-layer="133" from-port="1" to-layer="134" to-port="1" />
+		<edge from-layer="134" from-port="2" to-layer="142" to-port="1" />
+		<edge from-layer="134" from-port="2" to-layer="135" to-port="1" />
+		<edge from-layer="135" from-port="2" to-layer="136" to-port="0" />
+		<edge from-layer="136" from-port="1" to-layer="144" to-port="1" />
+		<edge from-layer="137" from-port="1" to-layer="138" to-port="1" />
+		<edge from-layer="137" from-port="1" to-layer="138" to-port="0" />
+		<edge from-layer="138" from-port="2" to-layer="139" to-port="0" />
+		<edge from-layer="139" from-port="1" to-layer="140" to-port="0" />
+		<edge from-layer="140" from-port="1" to-layer="141" to-port="0" />
+		<edge from-layer="141" from-port="1" to-layer="142" to-port="0" />
+		<edge from-layer="142" from-port="2" to-layer="143" to-port="0" />
+		<edge from-layer="143" from-port="1" to-layer="144" to-port="2" />
+		<edge from-layer="144" from-port="3" to-layer="145" to-port="0" />
+		<edge from-layer="145" from-port="1" to-layer="146" to-port="0" />
+		<edge from-layer="146" from-port="1" to-layer="147" to-port="0" />
+		<edge from-layer="147" from-port="1" to-layer="148" to-port="0" />
+		<edge from-layer="148" from-port="1" to-layer="149" to-port="1" />
+		<edge from-layer="148" from-port="1" to-layer="149" to-port="0" />
+		<edge from-layer="149" from-port="3" to-layer="156" to-port="2" />
+		<edge from-layer="149" from-port="3" to-layer="150" to-port="0" />
+		<edge from-layer="150" from-port="1" to-layer="152" to-port="0" />
+		<edge from-layer="150" from-port="1" to-layer="151" to-port="0" />
+		<edge from-layer="151" from-port="1" to-layer="154" to-port="1" />
+		<edge from-layer="151" from-port="1" to-layer="154" to-port="0" />
+		<edge from-layer="152" from-port="1" to-layer="153" to-port="1" />
+		<edge from-layer="152" from-port="1" to-layer="153" to-port="0" />
+		<edge from-layer="153" from-port="2" to-layer="154" to-port="2" />
+		<edge from-layer="154" from-port="3" to-layer="155" to-port="0" />
+		<edge from-layer="155" from-port="1" to-layer="156" to-port="1" />
+		<edge from-layer="155" from-port="1" to-layer="156" to-port="0" />
+		<edge from-layer="156" from-port="3" to-layer="157" to-port="0" />
+		<edge from-layer="156" from-port="3" to-layer="191" to-port="2" />
+		<edge from-layer="157" from-port="1" to-layer="158" to-port="0" />
+		<edge from-layer="157" from-port="1" to-layer="165" to-port="1" />
+		<edge from-layer="158" from-port="1" to-layer="159" to-port="0" />
+		<edge from-layer="159" from-port="1" to-layer="160" to-port="0" />
+		<edge from-layer="159" from-port="1" to-layer="160" to-port="1" />
+		<edge from-layer="160" from-port="2" to-layer="161" to-port="0" />
+		<edge from-layer="161" from-port="1" to-layer="162" to-port="0" />
+		<edge from-layer="162" from-port="1" to-layer="163" to-port="0" />
+		<edge from-layer="163" from-port="1" to-layer="164" to-port="0" />
+		<edge from-layer="164" from-port="3" to-layer="186" to-port="0" />
+		<edge from-layer="165" from-port="2" to-layer="166" to-port="0" />
+		<edge from-layer="166" from-port="1" to-layer="167" to-port="0" />
+		<edge from-layer="166" from-port="1" to-layer="179" to-port="0" />
+		<edge from-layer="167" from-port="1" to-layer="168" to-port="0" />
+		<edge from-layer="167" from-port="1" to-layer="168" to-port="1" />
+		<edge from-layer="168" from-port="2" to-layer="169" to-port="0" />
+		<edge from-layer="169" from-port="1" to-layer="170" to-port="0" />
+		<edge from-layer="170" from-port="1" to-layer="171" to-port="0" />
+		<edge from-layer="171" from-port="1" to-layer="172" to-port="0" />
+		<edge from-layer="172" from-port="3" to-layer="173" to-port="0" />
+		<edge from-layer="172" from-port="3" to-layer="174" to-port="0" />
+		<edge from-layer="173" from-port="1" to-layer="177" to-port="0" />
+		<edge from-layer="174" from-port="1" to-layer="175" to-port="0" />
+		<edge from-layer="175" from-port="1" to-layer="176" to-port="1" />
+		<edge from-layer="176" from-port="2" to-layer="177" to-port="1" />
+		<edge from-layer="176" from-port="2" to-layer="184" to-port="1" />
+		<edge from-layer="177" from-port="2" to-layer="178" to-port="0" />
+		<edge from-layer="178" from-port="1" to-layer="186" to-port="1" />
+		<edge from-layer="179" from-port="1" to-layer="180" to-port="0" />
+		<edge from-layer="179" from-port="1" to-layer="180" to-port="1" />
+		<edge from-layer="180" from-port="2" to-layer="181" to-port="0" />
+		<edge from-layer="181" from-port="1" to-layer="182" to-port="0" />
+		<edge from-layer="182" from-port="1" to-layer="183" to-port="0" />
+		<edge from-layer="183" from-port="1" to-layer="184" to-port="0" />
+		<edge from-layer="184" from-port="2" to-layer="185" to-port="0" />
+		<edge from-layer="185" from-port="1" to-layer="186" to-port="2" />
+		<edge from-layer="186" from-port="3" to-layer="187" to-port="0" />
+		<edge from-layer="187" from-port="1" to-layer="188" to-port="0" />
+		<edge from-layer="188" from-port="1" to-layer="189" to-port="0" />
+		<edge from-layer="189" from-port="1" to-layer="190" to-port="0" />
+		<edge from-layer="190" from-port="1" to-layer="191" to-port="1" />
+		<edge from-layer="190" from-port="1" to-layer="191" to-port="0" />
+		<edge from-layer="191" from-port="3" to-layer="192" to-port="0" />
+		<edge from-layer="191" from-port="3" to-layer="198" to-port="2" />
+		<edge from-layer="192" from-port="1" to-layer="194" to-port="0" />
+		<edge from-layer="192" from-port="1" to-layer="193" to-port="0" />
+		<edge from-layer="193" from-port="1" to-layer="196" to-port="0" />
+		<edge from-layer="193" from-port="1" to-layer="196" to-port="1" />
+		<edge from-layer="194" from-port="1" to-layer="195" to-port="0" />
+		<edge from-layer="194" from-port="1" to-layer="195" to-port="1" />
+		<edge from-layer="195" from-port="2" to-layer="196" to-port="2" />
+		<edge from-layer="196" from-port="3" to-layer="197" to-port="0" />
+		<edge from-layer="197" from-port="1" to-layer="198" to-port="1" />
+		<edge from-layer="197" from-port="1" to-layer="198" to-port="0" />
+		<edge from-layer="198" from-port="3" to-layer="199" to-port="0" />
+		<edge from-layer="198" from-port="3" to-layer="233" to-port="2" />
+		<edge from-layer="199" from-port="1" to-layer="200" to-port="0" />
+		<edge from-layer="199" from-port="1" to-layer="207" to-port="1" />
+		<edge from-layer="200" from-port="1" to-layer="201" to-port="0" />
+		<edge from-layer="201" from-port="1" to-layer="202" to-port="0" />
+		<edge from-layer="201" from-port="1" to-layer="202" to-port="1" />
+		<edge from-layer="202" from-port="2" to-layer="203" to-port="0" />
+		<edge from-layer="203" from-port="1" to-layer="204" to-port="0" />
+		<edge from-layer="204" from-port="1" to-layer="205" to-port="0" />
+		<edge from-layer="205" from-port="1" to-layer="206" to-port="0" />
+		<edge from-layer="206" from-port="3" to-layer="228" to-port="0" />
+		<edge from-layer="207" from-port="2" to-layer="208" to-port="0" />
+		<edge from-layer="208" from-port="1" to-layer="209" to-port="0" />
+		<edge from-layer="208" from-port="1" to-layer="221" to-port="0" />
+		<edge from-layer="209" from-port="1" to-layer="210" to-port="0" />
+		<edge from-layer="209" from-port="1" to-layer="210" to-port="1" />
+		<edge from-layer="210" from-port="2" to-layer="211" to-port="0" />
+		<edge from-layer="211" from-port="1" to-layer="212" to-port="0" />
+		<edge from-layer="212" from-port="1" to-layer="213" to-port="0" />
+		<edge from-layer="213" from-port="1" to-layer="214" to-port="0" />
+		<edge from-layer="214" from-port="3" to-layer="215" to-port="0" />
+		<edge from-layer="214" from-port="3" to-layer="216" to-port="0" />
+		<edge from-layer="215" from-port="1" to-layer="219" to-port="0" />
+		<edge from-layer="216" from-port="1" to-layer="217" to-port="0" />
+		<edge from-layer="217" from-port="1" to-layer="218" to-port="1" />
+		<edge from-layer="218" from-port="2" to-layer="219" to-port="1" />
+		<edge from-layer="218" from-port="2" to-layer="226" to-port="1" />
+		<edge from-layer="219" from-port="2" to-layer="220" to-port="0" />
+		<edge from-layer="220" from-port="1" to-layer="228" to-port="1" />
+		<edge from-layer="221" from-port="1" to-layer="222" to-port="1" />
+		<edge from-layer="221" from-port="1" to-layer="222" to-port="0" />
+		<edge from-layer="222" from-port="2" to-layer="223" to-port="0" />
+		<edge from-layer="223" from-port="1" to-layer="224" to-port="0" />
+		<edge from-layer="224" from-port="1" to-layer="225" to-port="0" />
+		<edge from-layer="225" from-port="1" to-layer="226" to-port="0" />
+		<edge from-layer="226" from-port="2" to-layer="227" to-port="0" />
+		<edge from-layer="227" from-port="1" to-layer="228" to-port="2" />
+		<edge from-layer="228" from-port="3" to-layer="229" to-port="0" />
+		<edge from-layer="229" from-port="1" to-layer="230" to-port="0" />
+		<edge from-layer="230" from-port="1" to-layer="231" to-port="0" />
+		<edge from-layer="231" from-port="1" to-layer="232" to-port="0" />
+		<edge from-layer="232" from-port="1" to-layer="233" to-port="1" />
+		<edge from-layer="232" from-port="1" to-layer="233" to-port="0" />
+		<edge from-layer="233" from-port="3" to-layer="234" to-port="0" />
+		<edge from-layer="233" from-port="3" to-layer="240" to-port="2" />
+		<edge from-layer="234" from-port="1" to-layer="235" to-port="0" />
+		<edge from-layer="234" from-port="1" to-layer="236" to-port="0" />
+		<edge from-layer="235" from-port="1" to-layer="238" to-port="0" />
+		<edge from-layer="235" from-port="1" to-layer="238" to-port="1" />
+		<edge from-layer="236" from-port="1" to-layer="237" to-port="0" />
+		<edge from-layer="236" from-port="1" to-layer="237" to-port="1" />
+		<edge from-layer="237" from-port="2" to-layer="238" to-port="2" />
+		<edge from-layer="238" from-port="3" to-layer="239" to-port="0" />
+		<edge from-layer="239" from-port="1" to-layer="240" to-port="0" />
+		<edge from-layer="239" from-port="1" to-layer="240" to-port="1" />
+		<edge from-layer="240" from-port="3" to-layer="241" to-port="0" />
+		<edge from-layer="241" from-port="1" to-layer="242" to-port="0" />
+		<edge from-layer="242" from-port="1" to-layer="243" to-port="0" />
+		<edge from-layer="242" from-port="1" to-layer="243" to-port="1" />
+		<edge from-layer="243" from-port="2" to-layer="244" to-port="0" />
+	</edges>
+	<rt_info />
+</net>
