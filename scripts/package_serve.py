@@ -336,6 +336,73 @@ def copy_file(src: Path, dst_dir: Path, relative_dst: Path) -> tuple[str, int]:
 
 CONVERT_IR_EXE = "convert_ir.exe" if IS_WINDOWS else "convert_ir"
 
+TOKENIZER_IR_FILES = ("openvino_tokenizer.xml", "openvino_tokenizer.bin",
+                      "openvino_detokenizer.xml", "openvino_detokenizer.bin")
+
+
+def _needs_tokenizer_ir(model_dir: Path) -> bool:
+    """Return True if tokenizer IR files are missing from model_dir."""
+    return not all((model_dir / name).is_file() for name in TOKENIZER_IR_FILES)
+
+
+def _find_python_with_tokenizers() -> str | None:
+    """Find a Python interpreter that has openvino_tokenizers installed."""
+    candidates = [sys.executable, "python", "python3"]
+    for py in candidates:
+        try:
+            result = subprocess.run(
+                [py, "-c", "import openvino_tokenizers; import openvino; import transformers"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0:
+                return py
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+    return None
+
+
+def generate_tokenizer_ir(model_dir: Path) -> bool:
+    """Generate OpenVINO tokenizer/detokenizer IR from HuggingFace tokenizer files.
+
+    Returns True on success.
+    """
+    py = _find_python_with_tokenizers()
+    if py is None:
+        log("ERROR", "No Python with openvino_tokenizers found. "
+            "Install it via: pip install openvino-tokenizers transformers")
+        return False
+
+    script = (
+        "from openvino_tokenizers import convert_tokenizer; "
+        "from openvino import save_model; "
+        "from transformers import AutoTokenizer; "
+        f"t = AutoTokenizer.from_pretrained(r'{model_dir}'); "
+        "tok, detok = convert_tokenizer(t, with_detokenizer=True); "
+        f"save_model(tok, r'{model_dir / 'openvino_tokenizer.xml'}'); "
+        f"save_model(detok, r'{model_dir / 'openvino_detokenizer.xml'}'); "
+        "print('[tokenizer] Tokenizer IR generated successfully')"
+    )
+
+    log("INFO", f"Generating tokenizer IR using: {py}")
+    try:
+        result = subprocess.run(
+            [py, "-c", script], capture_output=True, text=True, timeout=300,
+        )
+        sys.stdout.write(result.stdout)
+        if result.stderr:
+            sys.stderr.write(result.stderr)
+        if result.returncode != 0:
+            log("ERROR", f"Tokenizer IR generation failed (exit code {result.returncode})")
+            return False
+        log("INFO", "Tokenizer IR generation completed successfully")
+        return True
+    except subprocess.TimeoutExpired:
+        log("ERROR", "Tokenizer IR generation timed out (300s)")
+        return False
+    except Exception as e:
+        log("ERROR", f"Failed to generate tokenizer IR: {e}")
+        return False
+
 
 def _needs_ir_generation(model_dir: Path, group_size: int | None, vl: bool) -> bool:
     """Return True if the expected text IR files are missing from model_dir."""
@@ -525,9 +592,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--quant-mode", type=str, default="int4_asym",
                    choices=["int4_sym", "int4_asym", "int8_sym", "int8_asym"],
                    help="Quantization mode for IR generation (default: int4_asym).")
-    p.add_argument("--backup-mode", type=str, default="int4_sym",
+    p.add_argument("--backup-mode", type=str, default="int8_asym",
                    choices=["int4_sym", "int4_asym", "int8_sym", "int8_asym"],
-                   help="Backup quantization mode (default: int4_sym).")
+                   help="Backup quantization mode (default: int8_asym).")
     p.add_argument("--no-vl", action="store_true",
                    help="Skip vision-language IR generation (VL is enabled by default).")
     p.add_argument("--include-tokenizer-python", action="store_true",
@@ -551,7 +618,7 @@ def main(argv: list[str] | None = None) -> int:
         out = Path(args.output)
         if not out.is_absolute():
             out = ws / out
-        pkg_dir = out.resolve() / cfg
+        pkg_dir = out.resolve()
     else:
         pkg_dir = ws / "package_serve" / cfg
 
@@ -633,6 +700,13 @@ def main(argv: list[str] | None = None) -> int:
             if not generate_ir(ws, cfg, model_dir, group_size, args.quant_mode, args.backup_mode, vl):
                 log("ERROR", "IR generation failed, cannot bundle model")
                 return 1
+        # Generate tokenizer IR if missing
+        if args.clean or _needs_tokenizer_ir(model_dir):
+            reason = "forced by --clean" if args.clean else "tokenizer IR not found"
+            log("INFO", f"Generating tokenizer IR ({reason})...")
+            if not generate_tokenizer_ir(model_dir):
+                log("WARN", "Tokenizer IR generation failed; model may lack tokenizer IR files")
+
         files, issues = collect_model_files(model_dir, model_subdir, args.include_hf_weights, group_size)
         if issues:
             for iss in issues:

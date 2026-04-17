@@ -236,7 +236,9 @@ def make_car_status(hvac_status="开启", temp_left=24, temp_right=24):
 
 # ── Test definitions ─────────────────────────────────────────────────
 
-def run_tests(base_url: str, verbose: bool) -> tuple[list[tuple[str, bool, str]], list]:
+def run_tests(base_url: str, verbose: bool,
+              max_history: int = 0, single_turn: bool = False,
+              ) -> tuple[list[tuple[str, bool, str]], list]:
     results: list[tuple[str, bool, str]] = []
     all_trs: list[tuple[str, object]] = []  # (name, TestResult) for stats
     test_num = 0
@@ -473,7 +475,20 @@ def run_tests(base_url: str, verbose: bool) -> tuple[list[tuple[str, bool, str]]
          expect_chat, expect_contains, max_tokens) in TURNS:
         messages.append({"role": "user", "content": user_content})
 
-        tr = run(name, messages, max_tokens=max_tokens,
+        # Build the message list to send based on mode
+        if single_turn:
+            # Single-turn: system + current user message only (no history)
+            send_msgs = [messages[0], messages[-1]]
+        elif max_history > 0 and len(messages) > 1 + 2 * max_history:
+            # Sliding window: system + last N turn-pairs + current user message
+            # messages[0] = system, then alternating user/assistant pairs
+            # Keep system + last max_history pairs (2*max_history items) + current user
+            window_start = len(messages) - 2 * max_history - 1
+            send_msgs = [messages[0]] + messages[window_start:]
+        else:
+            send_msgs = messages
+
+        tr = run(name, send_msgs, max_tokens=max_tokens,
                  expect_intent=expect_intent, expect_field=expect_field,
                  expect_chat=expect_chat, expect_content_contains=expect_contains)
 
@@ -501,16 +516,24 @@ def main():
                         help="Number of runs (each run = full 20-turn conversation)")
     parser.add_argument("--report", type=str, default=None,
                         help="Write markdown report to this file path")
+    parser.add_argument("--max-history", type=int, default=0,
+                        help="Max turn-pairs to keep in context (0=unlimited, 3=recommended for DFlash)")
+    parser.add_argument("--single-turn", action="store_true",
+                        help="Single-turn mode: each turn sends only system+current (no history)")
     args = parser.parse_args()
 
     if args.no_proxy:
         os.environ["no_proxy"] = os.environ.get("no_proxy", "") + ",127.0.0.1,localhost"
 
     num_runs = args.runs
+    mode_str = ("single-turn" if args.single_turn
+                else f"max-history={args.max_history}" if args.max_history > 0
+                else "full-history")
 
     print(f"╔══════════════════════════════════════════════════════════╗")
     print(f"║       Car Assistant Intent Recognition Tests            ║")
     print(f"║  Server: {args.base_url:<47s} ║")
+    print(f"║  Mode: {mode_str:<49s} ║")
     print(f"║  Runs: {num_runs:<49d} ║")
     print(f"╚══════════════════════════════════════════════════════════╝")
 
@@ -524,7 +547,9 @@ def main():
         print(f"  Run {run_idx + 1}/{num_runs}")
         print(f"{'▓'*60}")
 
-        results, all_trs = run_tests(args.base_url, verbose=args.verbose)
+        results, all_trs = run_tests(args.base_url, verbose=args.verbose,
+                                     max_history=args.max_history,
+                                     single_turn=args.single_turn)
         passed = sum(1 for _, ok, _ in results if ok)
         total = len(results)
         all_run_results.append((passed, total))

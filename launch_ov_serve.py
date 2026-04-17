@@ -33,6 +33,7 @@ def _print_banner(config: dict[str, object], runtime_dirs: list[Path], log_file:
     lines.append(f"  Launch mode:    {config['launch_mode']}")
     lines.append(f"  Executable:     {config['exe']}")
     lines.append(f"  Model:          {config['model']}")
+    lines.append(f"  Model Name:     {config['model_name']}")
     lines.append(f"  Device:         {config['device']}")
     lines.append(f"  Port:           {config['port']}")
     lines.append(f"  Workers:        {config['workers']}")
@@ -191,6 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--freq-penalty", type=float, default=0.0, help="Frequency penalty.")
     parser.add_argument("--min-temp", type=float, default=0.0, help="Minimum sampling temperature.")
     parser.add_argument("--max-tokens", type=int, default=2048, help="Maximum generated tokens.")
+    parser.add_argument("--model-name", type=str, default=None, help="Model name for /v1/models (default: directory name).")
     parser.add_argument("--group-size", type=int, default=128, help="Quantization group size (e.g. 32, 128).")
     log_group = parser.add_mutually_exclusive_group()
     log_group.add_argument("--log", action="store_true", dest="log",
@@ -211,12 +213,13 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("No default model path was found. Pass --model explicitly.")
     if not model.exists():
         raise SystemExit(f"Model directory not found: {model}")
+    model_name = args.model_name or model.name
 
     env = os.environ.copy()
     env["OV_GENAI_USE_MODELING_API"] = "1"
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym")
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", str(args.group_size))
-    env.setdefault("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", "int4_sym")
+    env.setdefault("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", "int8_asym")
     resolved_runtime_dirs = _prepend_env_paths(env, PATH_VAR, runtime_dirs)
     _configure_tokenizer_python(env, script_dir, workspace_root)
 
@@ -246,6 +249,8 @@ def main(argv: list[str] | None = None) -> int:
         str(args.max_tokens),
         "--warmup-tokens",
         str(args.warmup_tokens),
+        "--model-name",
+        model_name,
     ]
     if not args.no_vl:
         cmd.append("--vl")
@@ -262,6 +267,7 @@ def main(argv: list[str] | None = None) -> int:
             "launch_mode": launch_mode,
             "exe": exe,
             "model": model,
+            "model_name": model_name,
             "device": args.device,
             "port": args.port,
             "workers": args.workers,
@@ -278,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
             "logging": args.log,
             "quant_mode": env.get("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym"),
             "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "128"),
-            "quant_backup_mode": env.get("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", "int4_sym"),
+            "quant_backup_mode": env.get("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", "int8_asym"),
         },
         resolved_runtime_dirs,
         log_file,
