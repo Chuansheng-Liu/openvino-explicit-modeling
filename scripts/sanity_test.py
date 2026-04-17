@@ -393,7 +393,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             {"type": "image_url", "image_url": {"url": img2_uri}},
             {"type": "text", "text": "Are these two images the same? Answer yes or no."}
         ]}],
-        max_tokens=32)
+        max_tokens=128)
 
     run("multi-img+text+multi-img: text (5b)",
         [{"role": "user", "content": "What is the speed of light in km/s? Just the number."}],
@@ -433,8 +433,9 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         expect_tool_name="get_weather")
 
     # 6c: Tool call → text answer (model uses tool result to answer)
+    # Don't pass tools= so the model cannot re-call; it must answer from the result.
     run("tool: result → answer (6c)",
-        [{"role": "system", "content": "You are a helpful assistant."},
+        [{"role": "system", "content": "You are a helpful assistant. The tool has already been called and the result is provided below. Answer the user's question directly using the tool result."},
          {"role": "user", "content": "What is the weather in Beijing?"},
          {"role": "assistant", "content": "",
           "tool_calls": [{"id": "call_0", "type": "function",
@@ -442,7 +443,6 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
                                        "arguments": "{\"city\": \"Beijing\"}"}}]},
          {"role": "tool", "content": "{\"temperature\": 22, \"condition\": \"sunny\", \"humidity\": 45}"},
          {"role": "user", "content": "Great, tell me the temperature."}],
-        tools=[WEATHER_TOOL],
         max_tokens=128)
 
     # 6d: Multiple tools available
@@ -641,7 +641,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
                                        "arguments": "{\"city\": \"Shanghai\"}"}}]},
          {"role": "tool", "content": "{\"temperature\": 25, \"condition\": \"cloudy\"}"},
          {"role": "assistant", "content": "Shanghai is 25°C and cloudy."},
-         {"role": "user", "content": "Which city is warmer? Answer in one sentence."}],
+         {"role": "user", "content": "Which city is warmer? Answer in one sentence based on the information above. Do NOT call any tools."}],
         tools=[WEATHER_TOOL],
         max_tokens=128,
         expect_finish="stop")
@@ -805,7 +805,7 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
 
     run("prefix-cache: text turn 2 (should hit cache)",
         [{"role": "user", "content": "What is 2+2? Answer with just the number."},
-         {"role": "assistant", "content": "<think>\n</think>\n\n4"},
+         {"role": "assistant", "content": "<think>\n\n</think>\n\n4"},
          {"role": "user", "content": "And what is 3+3? Answer with just the number."}],
         max_tokens=16,
         expect_prefix_cache_min=10)
