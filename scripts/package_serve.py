@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import json
 import os
 import shutil
 import struct
@@ -603,6 +604,94 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # ---------------------------------------------------------------------------
+# Model-specific config presets
+# ---------------------------------------------------------------------------
+
+# Known model presets keyed by model directory name patterns.
+# Matched case-insensitively against the model directory name.
+_MODEL_PRESETS: dict[str, dict] = {
+    "Qwen3.6-35B-A3B": {
+        "model_name": "Qwen3.6-35B-A3B",
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "top_k": 20,
+        "rep_penalty": 1.1,
+        "freq_penalty": 0.1,
+        "pres_penalty": 0.0,
+        "max_tokens": 2048,
+        "warmup_tokens": 512,
+        "vl": True,
+        "thinking": False,
+    },
+    "Qwen3.5-35B-A3B": {
+        "model_name": "Qwen3.5-35B-A3B",
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "top_k": 20,
+        "rep_penalty": 1.1,
+        "freq_penalty": 0.1,
+        "pres_penalty": 0.0,
+        "max_tokens": 2048,
+        "warmup_tokens": 512,
+        "vl": True,
+        "thinking": False,
+    },
+    "Qwen3.5-9B": {
+        "model_name": "Qwen3.5-9B",
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "top_k": 20,
+        "rep_penalty": 1.1,
+        "freq_penalty": 0.1,
+        "pres_penalty": 0.0,
+        "max_tokens": 2048,
+        "warmup_tokens": 512,
+        "vl": False,
+        "thinking": False,
+    },
+}
+
+# Fallback config when model is not in presets
+_DEFAULT_CONFIG = {
+    "temperature": 0.1,
+    "top_p": 1.0,
+    "top_k": 20,
+    "rep_penalty": 1.1,
+    "freq_penalty": 0.1,
+    "pres_penalty": 0.0,
+    "max_tokens": 2048,
+    "warmup_tokens": 512,
+    "vl": True,
+    "thinking": False,
+}
+
+
+def _match_model_preset(model_name: str) -> dict:
+    """Match model directory name against known presets (case-insensitive partial match)."""
+    name_lower = model_name.lower()
+    for pattern, preset in _MODEL_PRESETS.items():
+        if pattern.lower() in name_lower:
+            return dict(preset)
+    return dict(_DEFAULT_CONFIG)
+
+
+def generate_config_json(pkg_dir: Path, model_name: str, args) -> Path:
+    """Generate config.json in the package directory with model-specific defaults."""
+    config = _match_model_preset(model_name)
+    config.setdefault("model_name", model_name)
+    # Override with packaging args
+    config["quant_mode"] = args.quant_mode
+    config["backup_mode"] = args.backup_mode
+    config["group_size"] = args.group_size
+
+    config_path = pkg_dir / "config.json"
+    with config_path.open("w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    return config_path
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -737,6 +826,11 @@ def main(argv: list[str] | None = None) -> int:
     if readme_src.is_file():
         shutil.copy2(readme_src, pkg_dir / "readme.txt")
         log("INFO", "Copied readme.txt to package root")
+
+    # Generate config.json with model-specific defaults
+    if model_subdir is not None:
+        config_path = generate_config_json(pkg_dir, model_subdir, args)
+        log("INFO", f"Generated {config_path.name} for {model_subdir}")
 
     # Create versioned soname symlinks (Linux only)
     if not IS_WINDOWS:

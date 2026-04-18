@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
-"""Launch ov_serve with cross-platform defaults for Qwen3.5.
+"""Launch ov_serve with model-specific defaults from config.json.
+
+Reads config.json (if present) to set model-specific defaults.
+CLI arguments override config.json, which overrides hard-coded defaults.
+
+Priority: CLI args > config.json > hard-coded defaults
 
 Examples:
     python launch_ov_serve.py
     python launch_ov_serve.py --no-vl
     python launch_ov_serve.py --model /path/to/Qwen3.5-35B-A3B
+    python launch_ov_serve.py --rep-penalty 1.2   # override config.json
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -27,10 +34,11 @@ PYTHONPATH_VAR = "PYTHONPATH"
 def _print_banner(config: dict[str, object], runtime_dirs: list[Path], log_file: Path | None) -> str:
     lines = []
     lines.append("═══════════════════════════════════════════════════")
-    lines.append("  ov_serve — Qwen3.5 OpenVINO Inference Server")
+    lines.append("  ov_serve — OpenVINO Inference Server")
     lines.append("═══════════════════════════════════════════════════")
     lines.append("")
     lines.append(f"  Launch mode:    {config['launch_mode']}")
+    lines.append(f"  Config:         {config.get('config_source', 'defaults')}")
     lines.append(f"  Executable:     {config['exe']}")
     lines.append(f"  Model:          {config['model']}")
     lines.append(f"  Model Name:     {config['model_name']}")
@@ -175,37 +183,93 @@ def _resolve_launch_layout(script_dir: Path) -> tuple[str, Path, list[Path], Pat
     return "build-tree", exe, runtime_dirs, workspace_root
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Launch ov_serve with Qwen3.5 defaults.")
+# ── Config file support ──────────────────────────────────────────────
+
+# Hard-coded defaults (used when neither config.json nor CLI provides a value)
+_DEFAULTS = {
+    "port": 8080,
+    "warmup_tokens": 512,
+    "device": "GPU",
+    "workers": 1,
+    "temperature": 0.1,
+    "top_p": 1.0,
+    "top_k": 20,
+    "rep_penalty": 1.0,
+    "pres_penalty": 0.0,
+    "freq_penalty": 0.0,
+    "min_temp": 0.0,
+    "max_tokens": 2048,
+    "group_size": 128,
+    "vl": True,
+    "thinking": False,
+    "log": False,
+    "quant_mode": "int4_asym",
+    "backup_mode": "int8_asym",
+}
+
+
+def _load_config(script_dir: Path) -> dict:
+    """Load config.json from script_dir if it exists, return empty dict otherwise."""
+    config_path = script_dir / "config.json"
+    if not config_path.is_file():
+        return {}
+    try:
+        with config_path.open("r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        print(f"  Loaded config: {config_path}")
+        return cfg
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"  WARNING: Failed to load {config_path}: {e}")
+        return {}
+
+
+def _merge_defaults(file_cfg: dict) -> dict:
+    """Merge file config over hard-coded defaults. Returns merged defaults dict."""
+    merged = dict(_DEFAULTS)
+    # Map config.json keys to internal keys (config.json uses the same names)
+    for key in _DEFAULTS:
+        if key in file_cfg:
+            merged[key] = file_cfg[key]
+    return merged
+
+
+def build_parser(defaults: dict) -> argparse.ArgumentParser:
+    d = defaults
+    parser = argparse.ArgumentParser(description="Launch ov_serve with model-specific defaults from config.json.")
     parser.add_argument("--model", type=Path, default=None, help="Path to HF model directory.")
-    parser.add_argument("--no-vl", action="store_true", help="Disable vision-language mode.")
-    parser.add_argument("--port", type=int, default=8080, help="HTTP port.")
-    parser.add_argument("--warmup-tokens", type=int, default=512, help="Warmup sequence length (0 disables warmup).")
-    parser.add_argument("--thinking", action="store_true", help="Enable thinking mode.")
-    parser.add_argument("--device", default="GPU", help="Target device.")
-    parser.add_argument("--workers", type=int, default=1, help="Worker count.")
-    parser.add_argument("--temperature", type=float, default=0.1, help="Default temperature when requests omit it.")
-    parser.add_argument("--top-p", type=float, default=1.0, help="Default top-p when requests omit it.")
-    parser.add_argument("--top-k", type=int, default=20, help="Default top-k when requests omit it.")
-    parser.add_argument("--rep-penalty", type=float, default=1.0, help="Repetition penalty (1.0 = off).")
-    parser.add_argument("--pres-penalty", type=float, default=0.0, help="Presence penalty.")
-    parser.add_argument("--freq-penalty", type=float, default=0.0, help="Frequency penalty.")
-    parser.add_argument("--min-temp", type=float, default=0.0, help="Minimum sampling temperature.")
-    parser.add_argument("--max-tokens", type=int, default=2048, help="Maximum generated tokens.")
-    parser.add_argument("--model-name", type=str, default=None, help="Model name for /v1/models (default: directory name).")
-    parser.add_argument("--group-size", type=int, default=128, help="Quantization group size (e.g. 32, 128).")
+    parser.add_argument("--no-vl", action="store_true", default=not d["vl"], help="Disable vision-language mode.")
+    parser.add_argument("--port", type=int, default=d["port"], help=f"HTTP port (default: {d['port']}).")
+    parser.add_argument("--warmup-tokens", type=int, default=d["warmup_tokens"], help=f"Warmup sequence length (default: {d['warmup_tokens']}).")
+    parser.add_argument("--thinking", action="store_true", default=d["thinking"], help="Enable thinking mode.")
+    parser.add_argument("--device", default=d["device"], help=f"Target device (default: {d['device']}).")
+    parser.add_argument("--workers", type=int, default=d["workers"], help=f"Worker count (default: {d['workers']}).")
+    parser.add_argument("--temperature", type=float, default=d["temperature"], help=f"Default temperature (default: {d['temperature']}).")
+    parser.add_argument("--top-p", type=float, default=d["top_p"], help=f"Default top-p (default: {d['top_p']}).")
+    parser.add_argument("--top-k", type=int, default=d["top_k"], help=f"Default top-k (default: {d['top_k']}).")
+    parser.add_argument("--rep-penalty", type=float, default=d["rep_penalty"], help=f"Repetition penalty (default: {d['rep_penalty']}).")
+    parser.add_argument("--pres-penalty", type=float, default=d["pres_penalty"], help=f"Presence penalty (default: {d['pres_penalty']}).")
+    parser.add_argument("--freq-penalty", type=float, default=d["freq_penalty"], help=f"Frequency penalty (default: {d['freq_penalty']}).")
+    parser.add_argument("--min-temp", type=float, default=d["min_temp"], help=f"Minimum sampling temperature (default: {d['min_temp']}).")
+    parser.add_argument("--max-tokens", type=int, default=d["max_tokens"], help=f"Maximum generated tokens (default: {d['max_tokens']}).")
+    parser.add_argument("--model-name", type=str, default=None, help="Model name for /v1/models (default: directory name or config).")
+    parser.add_argument("--group-size", type=int, default=d["group_size"], help=f"Quantization group size (default: {d['group_size']}).")
     log_group = parser.add_mutually_exclusive_group()
     log_group.add_argument("--log", action="store_true", dest="log",
                            help="Enable stderr logging to ov_serve.log.")
     log_group.add_argument("--no-log", action="store_false", dest="log",
-                           help="Disable stderr logging (default).")
-    parser.set_defaults(log=False)
+                           help="Disable stderr logging.")
+    parser.set_defaults(log=d["log"])
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     script_dir = Path(__file__).resolve().parent
-    args = build_parser().parse_args(argv)
+
+    # Load config.json → merge with hard-coded defaults → parse CLI (CLI wins)
+    file_cfg = _load_config(script_dir)
+    defaults = _merge_defaults(file_cfg)
+    args = build_parser(defaults).parse_args(argv)
+
     launch_mode, exe, runtime_dirs, workspace_root = _resolve_launch_layout(script_dir)
 
     model = args.model or _default_model(script_dir, workspace_root)
@@ -213,13 +277,17 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("No default model path was found. Pass --model explicitly.")
     if not model.exists():
         raise SystemExit(f"Model directory not found: {model}")
-    model_name = args.model_name or model.name
+    model_name = args.model_name or file_cfg.get("model_name") or model.name
+
+    quant_mode = file_cfg.get("quant_mode", defaults["quant_mode"])
+    backup_mode = file_cfg.get("backup_mode", defaults["backup_mode"])
+    group_size_str = str(args.group_size)
 
     env = os.environ.copy()
     env["OV_GENAI_USE_MODELING_API"] = "1"
-    env.setdefault("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym")
-    env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", str(args.group_size))
-    env.setdefault("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", "int8_asym")
+    env.setdefault("OV_GENAI_INFLIGHT_QUANT_MODE", quant_mode)
+    env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", group_size_str)
+    env.setdefault("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", backup_mode)
     resolved_runtime_dirs = _prepend_env_paths(env, PATH_VAR, runtime_dirs)
     _configure_tokenizer_python(env, script_dir, workspace_root)
 
@@ -262,9 +330,11 @@ def main(argv: list[str] | None = None) -> int:
         cmd.append("--no-log")
 
     log_file = script_dir / "ov_serve.log" if args.log else None
+    config_source = "config.json" if file_cfg else "built-in defaults"
     banner_text = _print_banner(
         {
             "launch_mode": launch_mode,
+            "config_source": config_source,
             "exe": exe,
             "model": model,
             "model_name": model_name,
@@ -282,9 +352,9 @@ def main(argv: list[str] | None = None) -> int:
             "max_tokens": args.max_tokens,
             "warmup_tokens": args.warmup_tokens,
             "logging": args.log,
-            "quant_mode": env.get("OV_GENAI_INFLIGHT_QUANT_MODE", "int4_asym"),
-            "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", "128"),
-            "quant_backup_mode": env.get("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", "int8_asym"),
+            "quant_mode": env.get("OV_GENAI_INFLIGHT_QUANT_MODE", quant_mode),
+            "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", group_size_str),
+            "quant_backup_mode": env.get("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", backup_mode),
         },
         resolved_runtime_dirs,
         log_file,
