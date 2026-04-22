@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY drivers/ /tmp/drivers/
 RUN dpkg -i /tmp/drivers/*.deb && rm -rf /tmp/drivers/
 
-COPY Release/ /opt/ov_serve/
+COPY . /opt/ov_serve/
 
 WORKDIR /opt/ov_serve
 EXPOSE 8080
