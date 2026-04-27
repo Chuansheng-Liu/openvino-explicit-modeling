@@ -2,13 +2,18 @@
 """Quick curl-style e2e latency benchmark for car assistant intent recognition.
 
 Uses unbuffered socket streaming for accurate per-token timing.
-Measures cold (first run) and warm (subsequent runs with KV cache hit) latency.
+Two modes:
+  1. Single-prompt (default): repeat same prompt N times, measure cold/warm TTFT.
+  2. Prefix-cache (--prefix-cache): send N different user prompts sequentially,
+     all sharing the same system prompt.  Measures prefix cache hit speedup.
 
 Usage:
-    python scripts/curl_benchmark.py                          # default localhost:8080
+    python scripts/curl_benchmark.py                          # single-prompt mode
     python scripts/curl_benchmark.py --host 192.168.1.100 --port 8093
     python scripts/curl_benchmark.py --runs 5 --verbose
     python scripts/curl_benchmark.py --prompt "turn on the AC"
+    python scripts/curl_benchmark.py --prefix-cache            # prefix-cache mode
+    python scripts/curl_benchmark.py --prefix-cache --num-prompts 5
 """
 
 from __future__ import annotations
@@ -248,17 +253,22 @@ def stream_request(host: str, port: int, messages: list,
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Quick e2e latency benchmark for car assistant (streaming, unbuffered socket)")
-    parser.add_argument("--host", default="127.0.0.1", help="Server host (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8080, help="Server port (default: 8080)")
-    parser.add_argument("--runs", type=int, default=3, help="Number of runs (default: 3)")
-    parser.add_argument("--prompt", default="open the door", help="User prompt (default: 'open the door')")
-    parser.add_argument("--verbose", action="store_true", help="Print model output")
-    parser.add_argument("--no-car-status", action="store_true", help="Skip car_status in user message")
-    args = parser.parse_args()
+PREFIX_CACHE_PROMPTS = [
+    ("打开天窗", "vehicle_sunroof"),
+    ("打开空调", "hvac_action"),
+    ("把温度调到26度", "hvac_temp"),
+    ("打开车门", "vehicle_door"),
+    ("播放音乐", "music_play_action"),
+    ("切换到运动模式", "vehicle_drive_mode"),
+    ("打开后备箱", "vehicle_trunk"),
+    ("关闭车窗", "vehicle_window"),
+    ("下一首歌", "music_up_down"),
+    ("打开YouTube", "gui_open_app"),
+]
 
+
+def run_single_prompt_benchmark(args):
+    """Original mode: repeat the same prompt N times, measure cold/warm."""
     user_content = args.prompt
     if not args.no_car_status:
         user_content = f"{CAR_STATUS}\n<user_input>{args.prompt}</user_input>"
@@ -269,7 +279,7 @@ def main():
     ]
 
     print(f"{'═'*65}")
-    print(f"  Car Assistant E2E Latency Benchmark")
+    print(f"  Car Assistant E2E Latency Benchmark — Single Prompt")
     print(f"  Server: {args.host}:{args.port}  |  Runs: {args.runs}")
     print(f"  Prompt: \"{args.prompt}\"")
     print(f"{'═'*65}")
@@ -288,7 +298,6 @@ def main():
         e2es.append(r["e2e_ms"])
         time.sleep(0.5)
 
-    # Summary (warm = skip first run)
     print(f"\n  {'─'*55}")
     if len(ttfts) > 1:
         warm_ttfts = ttfts[1:]
@@ -300,6 +309,103 @@ def main():
     else:
         print(f"  TTFT={ttfts[0]:.0f}ms  E2E={e2es[0]:.0f}ms")
     print(f"{'═'*65}")
+
+
+def _run_prefix_phase(args, prompts, phase_name):
+    """Run a list of prompts and return results + print table."""
+    print(f"\n  {'#':<4s} {'Prompt':<22s} {'TTFT':>8s} {'E2E':>8s} {'Tokens':>7s} {'TPS':>7s} {'Output'}")
+    print(f"  {'─'*4} {'─'*22} {'─'*8} {'─'*8} {'─'*7} {'─'*7} {'─'*30}")
+
+    results = []
+    for i, (prompt, expected_intent) in enumerate(prompts):
+        user_content = f"{CAR_STATUS}\n<user_input>{prompt}</user_input>"
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
+        r = stream_request(args.host, args.port, messages)
+
+        output_short = r["output"].replace("\n", " ")[:40]
+        intent_ok = expected_intent in r["output"]
+        marker = "✅" if intent_ok else "❌"
+
+        print(f"  {i+1:<4d} {prompt:<22s} {r['ttft_ms']:>7.0f}ms {r['e2e_ms']:>7.0f}ms {r['tokens']:>7d} {r['tps']:>6.1f} {marker} {output_short}")
+        results.append(r)
+        time.sleep(0.3)
+
+    ttfts = [r["ttft_ms"] for r in results]
+    print(f"\n  {'─'*60}")
+    avg_ttft = sum(ttfts) / len(ttfts)
+    min_ttft = min(ttfts)
+    max_ttft = max(ttfts)
+    print(f"  {phase_name}: TTFT avg={avg_ttft:.0f}ms  min={min_ttft:.0f}ms  max={max_ttft:.0f}ms  (n={len(ttfts)})")
+    return results
+
+
+def run_prefix_cache_benchmark(args):
+    """Prefix-cache benchmark with two phases:
+
+    Phase 1 — Batch (one session): All N prompts sent sequentially in one
+    invocation.  The first few requests build the prefix snapshot; later
+    requests should hit the cache and show lower TTFT.
+
+    Phase 2 — Standalone (one prompt per invocation): Each prompt is sent
+    individually.  Since the prefix snapshot persists in the server session,
+    every request should hit the cache.
+    """
+    prompts = PREFIX_CACHE_PROMPTS[:args.num_prompts]
+
+    print(f"{'═'*70}")
+    print(f"  Prefix-Cache Benchmark")
+    print(f"  Server: {args.host}:{args.port}  |  Prompts: {len(prompts)}")
+    print(f"  Shared prefix: system_prompt + car_status (~{len(SYSTEM_PROMPT) + len(CAR_STATUS)} chars)")
+    print(f"{'═'*70}")
+
+    # Phase 1: all prompts in one batch
+    print(f"\n  ▶ Phase 1: Batch — all {len(prompts)} prompts in one session")
+    batch_results = _run_prefix_phase(args, prompts, "Batch")
+
+    # Phase 2: each prompt as a standalone request
+    print(f"\n  ▶ Phase 2: Standalone — one prompt per invocation")
+    standalone_results = _run_prefix_phase(args, prompts, "Standalone")
+
+    # Combined summary
+    batch_ttfts = [r["ttft_ms"] for r in batch_results]
+    standalone_ttfts = [r["ttft_ms"] for r in standalone_results]
+    # For batch, skip warmup requests (first 3) for "cached" avg
+    cached_start = min(3, len(batch_ttfts) - 1)
+    batch_cached = batch_ttfts[cached_start:] if cached_start < len(batch_ttfts) else batch_ttfts
+    batch_cached_avg = sum(batch_cached) / len(batch_cached) if batch_cached else 0
+    standalone_avg = sum(standalone_ttfts) / len(standalone_ttfts)
+
+    print(f"\n  {'━'*60}")
+    print(f"  Summary")
+    print(f"  {'━'*60}")
+    print(f"  Batch cached (req {cached_start+1}+):  TTFT avg={batch_cached_avg:.0f}ms")
+    print(f"  Standalone (all {len(prompts)}):      TTFT avg={standalone_avg:.0f}ms")
+    print(f"{'═'*70}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Quick e2e latency benchmark for car assistant (streaming, unbuffered socket)")
+    parser.add_argument("--host", default="127.0.0.1", help="Server host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=8080, help="Server port (default: 8080)")
+    parser.add_argument("--runs", type=int, default=3, help="Number of runs for single-prompt mode (default: 3)")
+    parser.add_argument("--prompt", default="open the door", help="User prompt for single-prompt mode")
+    parser.add_argument("--verbose", action="store_true", help="Print model output")
+    parser.add_argument("--no-car-status", action="store_true", help="Skip car_status in user message")
+    parser.add_argument("--prefix-cache", action="store_true",
+                        help="Run prefix-cache benchmark: sequential different prompts sharing system prompt")
+    parser.add_argument("--num-prompts", type=int, default=10,
+                        help="Number of prompts for prefix-cache mode (default: 10, max: 10)")
+    args = parser.parse_args()
+    args.num_prompts = min(args.num_prompts, len(PREFIX_CACHE_PROMPTS))
+
+    if args.prefix_cache:
+        run_prefix_cache_benchmark(args)
+    else:
+        run_single_prompt_benchmark(args)
 
 
 if __name__ == "__main__":
