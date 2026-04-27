@@ -57,6 +57,7 @@ def _print_banner(config: dict[str, object], runtime_dirs: list[Path], log_file:
     lines.append(f"  Warmup Tokens:  {config['warmup_tokens']}")
     lines.append(f"  Logging:        {config['logging']}")
     lines.append(f"  Quant:          {config['quant_mode']} / group_size={config['quant_group_size']} / backup={config['quant_backup_mode']}")
+    lines.append(f"  MoE Prefill:    hybrid={config.get('hybrid_prefill', '1')} gpu_mask={config.get('gpu_mask_prefill', '1')}")
     lines.append("")
     lines.append(f"  {PATH_VAR}:")
     for path in runtime_dirs:
@@ -288,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_MODE", quant_mode)
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", group_size_str)
     env.setdefault("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", backup_mode)
+    env.setdefault("MOE_USE_HYBRID_PREFILL", "1")
+    env.setdefault("MOE_USE_GPU_MASK_PREFILL", "1")
     resolved_runtime_dirs = _prepend_env_paths(env, PATH_VAR, runtime_dirs)
     _configure_tokenizer_python(env, script_dir, workspace_root)
 
@@ -355,6 +358,8 @@ def main(argv: list[str] | None = None) -> int:
             "quant_mode": env.get("OV_GENAI_INFLIGHT_QUANT_MODE", quant_mode),
             "quant_group_size": env.get("OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE", group_size_str),
             "quant_backup_mode": env.get("OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE", backup_mode),
+            "hybrid_prefill": env.get("MOE_USE_HYBRID_PREFILL", "1"),
+            "gpu_mask_prefill": env.get("MOE_USE_GPU_MASK_PREFILL", "1"),
         },
         resolved_runtime_dirs,
         log_file,
