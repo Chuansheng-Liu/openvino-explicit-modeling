@@ -352,6 +352,15 @@ def make_car_status(hvac_status="开启", temp_left=24, temp_right=24):
     )
 
 
+# Patterns that indicate a VL failure (model couldn't see the image)
+_VL_BLANK_PATTERNS = [
+    "blank", "white screen", "white background", "empty image",
+    "nothing to analyze", "no visible content", "no content",
+    "空白", "白屏", "什么都没有", "看不到内容", "没有内容",
+    "完全空白", "纯白",
+]
+
+
 # ── Test definitions ─────────────────────────────────────────────────
 
 def run_tests(base_url: str, verbose: bool,
@@ -454,6 +463,21 @@ def run_tests(base_url: str, verbose: bool,
                         detail = "expected chat response but got JSON intent"
                 except json.JSONDecodeError:
                     pass  # Good — it's a chat response
+
+            # VL blank-image detection for VL turns
+            is_vl_turn = "vl" in name.lower()
+            if is_vl_turn and content:
+                lower = content.lower()
+                for pat in _VL_BLANK_PATTERNS:
+                    if pat in lower:
+                        ok = False
+                        detail += f"; VL blank-image: '{pat}' in output"
+                        break
+
+            # Content emptiness check (except when we expect pure intent JSON)
+            if tr.completion_tokens < 1:
+                ok = False
+                detail += "; 0 completion tokens"
 
             status = "PASS" if ok else "FAIL"
             color = "\033[92m" if ok else "\033[91m"
@@ -627,6 +651,39 @@ def run_tests(base_url: str, verbose: bool,
         resp_content = tr.content if tr else ""
         messages.append({"role": "assistant", "content": resp_content})
 
+    # ── Performance summary ──
+    if all_trs:
+        print(f"\n{'═'*60}")
+        print("  PERFORMANCE SUMMARY")
+        print(f"{'═'*60}")
+        text_ttfts = [tr.ttft for name, tr in all_trs
+                      if "vl" not in name.lower() and tr and tr.ttft > 0]
+        vl_ttfts = [tr.ttft for name, tr in all_trs
+                    if "vl" in name.lower() and tr and tr.ttft > 0]
+        all_tps = [tr.tps for _, tr in all_trs if tr and tr.tps > 0]
+
+        def _stats(vals):
+            if not vals:
+                return "n/a"
+            avg = sum(vals) / len(vals)
+            return f"avg={avg:.0f}, min={min(vals):.0f}, max={max(vals):.0f} (n={len(vals)})"
+
+        print(f"  Text TTFT     : {_stats(text_ttfts)}")
+        print(f"  VL TTFT       : {_stats(vl_ttfts)}")
+        print(f"  TPS           : {_stats(all_tps)}")
+
+        # Warn on perf outliers (TTFT > 3x P50 within category)
+        for cat_name, ttfts in [("text", text_ttfts), ("VL", vl_ttfts)]:
+            if len(ttfts) >= 3:
+                sorted_t = sorted(ttfts)
+                p50 = sorted_t[len(sorted_t) // 2]
+                for name, tr in all_trs:
+                    if tr and tr.ttft > p50 * 3 and tr.ttft > 500:
+                        is_vl = "vl" in name.lower()
+                        if (cat_name == "VL") == is_vl:
+                            print(f"  ⚠ PERF OUTLIER: {name} — "
+                                  f"TTFT {tr.ttft:.0f}ms > 3x P50 ({p50:.0f}ms)")
+
     return results, all_trs
 
 
@@ -725,27 +782,38 @@ def run_benchmark(base_url: str, runs: int = 3, verbose: bool = False):
 
         # Check intent correctness
         last_output = outputs[-1].strip()
+        # Strip <think>...</think> tags
+        import re as _re
+        clean_output = _re.sub(r"<think>.*?</think>\s*", "", last_output, flags=_re.DOTALL).strip()
         intent_ok = False
+        quality_warn = ""
         if expected_intent is None:
-            # Chat or describe case — just check it's not empty
-            intent_ok = len(last_output) > 0
+            # Chat or describe case — check not empty and no blank-image pattern
+            intent_ok = len(clean_output) > 0
+            if is_vl or is_vl == "describe":
+                lower = clean_output.lower()
+                for pat in _VL_BLANK_PATTERNS:
+                    if pat in lower:
+                        intent_ok = False
+                        quality_warn = f" [VL blank: '{pat}']"
+                        break
         else:
             try:
-                parsed_json = json.loads(last_output)
+                parsed_json = json.loads(clean_output)
                 intent_ok = parsed_json.get("intent") == expected_intent
             except Exception:
                 # Try extracting JSON from mixed content
-                if "{" in last_output:
-                    start = last_output.index("{")
+                if "{" in clean_output:
+                    start = clean_output.index("{")
                     depth = 0
-                    for idx in range(start, len(last_output)):
-                        if last_output[idx] == "{":
+                    for idx in range(start, len(clean_output)):
+                        if clean_output[idx] == "{":
                             depth += 1
-                        elif last_output[idx] == "}":
+                        elif clean_output[idx] == "}":
                             depth -= 1
                             if depth == 0:
                                 try:
-                                    parsed_json = json.loads(last_output[start:idx+1])
+                                    parsed_json = json.loads(clean_output[start:idx+1])
                                     intent_ok = parsed_json.get("intent") == expected_intent
                                 except Exception:
                                     pass
@@ -753,9 +821,9 @@ def run_benchmark(base_url: str, runs: int = 3, verbose: bool = False):
 
         status = "\033[92m✓\033[0m" if intent_ok else "\033[91m✗\033[0m"
         run_strs = "  ".join(f"{t:.0f}" for t in ttfts)
-        print(f"\n{status} {case_name:<16s}  TTFT: [{run_strs}] ms  avg={avg_ttft:.0f}ms  e2e_avg={avg_e2e:.0f}ms")
+        print(f"\n{status} {case_name:<16s}  TTFT: [{run_strs}] ms  avg={avg_ttft:.0f}ms  e2e_avg={avg_e2e:.0f}ms{quality_warn}")
         if verbose:
-            print(f"  Output: {last_output[:200]}")
+            print(f"  Output: {clean_output[:200]}")
 
     # Summary
     print(f"\n{'─'*70}")

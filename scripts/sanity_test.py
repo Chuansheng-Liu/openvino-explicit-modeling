@@ -158,6 +158,56 @@ def chat_stream(base_url: str, messages: list, *, tools: list | None = None,
 
 # ── Result helpers ───────────────────────────────────────────────────
 
+def _strip_thinking(text: str) -> str:
+    """Remove <think>...</think> tags from model output."""
+    import re
+    return re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL).strip()
+
+
+# Patterns that indicate a VL failure (model couldn't see the image)
+_VL_BLANK_PATTERNS = [
+    "blank", "white screen", "white background", "empty image",
+    "nothing to analyze", "no visible content", "no content",
+    "空白", "白屏", "什么都没有", "看不到内容", "没有内容",
+    "完全空白", "纯白",
+]
+
+
+def validate_output(content: str, *, mode: str = "text",
+                    expect_keywords: list[str] | None = None) -> tuple[bool, str]:
+    """Validate model output quality.
+
+    mode: "text", "vl_describe", "vl_intent", "chat", "tool_call"
+    expect_keywords: for VL tests, at least one keyword must appear (positive oracle)
+    Returns (ok, reason).
+    """
+    clean = _strip_thinking(content).strip()
+
+    # tool_call mode: empty content is expected (tool calls go in tool_calls field)
+    if mode == "tool_call":
+        return True, ""
+
+    # Empty output
+    if len(clean) < 1:
+        return False, "output is empty"
+
+    # VL blank-image detection (VL describe and VL intent modes)
+    if mode in ("vl_describe", "vl_intent"):
+        lower = clean.lower()
+        for pat in _VL_BLANK_PATTERNS:
+            if pat in lower:
+                return False, f"VL blank-image detected: '{pat}' in output"
+
+    # Positive oracle for VL describe: at least one expected keyword must appear
+    if mode == "vl_describe" and expect_keywords:
+        lower = clean.lower()
+        if not any(kw.lower() in lower for kw in expect_keywords):
+            return False, (f"VL output missing expected keywords "
+                           f"(expected one of: {expect_keywords[:5]})")
+
+    return True, ""
+
+
 class TestResult:
     def __init__(self, name: str, resp: dict):
         self.name = name
@@ -275,10 +325,18 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
     results: list[tuple[str, bool, str]] = []
     test_num = 0
 
+    all_perf: list[dict] = []  # collect per-test perf data for summary
+
     def run(name: str, messages, *, tools=None, max_tokens=256,
             expect_finish="stop", expect_tool_name=None, expect_content_contains=None,
             expect_tool_count=None, expect_prefix_cache_min=None, stream=False,
-            temperature=None, top_p=None):
+            temperature=None, top_p=None,
+            output_mode="text", expect_vl_keywords=None):
+        """Run a single test.
+
+        output_mode: "text", "vl_describe", "vl_intent", "chat", "tool_call"
+        expect_vl_keywords: list of keywords — at least one must appear for VL tests
+        """
         nonlocal test_num
         test_num += 1
         label = f"[{test_num}] {name}"
@@ -333,9 +391,26 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             passed = False
             fail_reasons.append("0 completion tokens")
 
+        # Output quality validation
+        # Auto-detect mode from expect_finish if not explicitly set
+        effective_mode = output_mode
+        if effective_mode == "text" and expect_finish == "tool_calls":
+            effective_mode = "tool_call"
+        vok, vreason = validate_output(tr.content, mode=effective_mode,
+                                       expect_keywords=expect_vl_keywords)
+        if not vok:
+            passed = False
+            fail_reasons.append(vreason)
+
         status = "PASS" if passed else f"FAIL: {'; '.join(fail_reasons)}"
         print(f"  result        : {status}")
         results.append((label, passed, status))
+
+        # Collect perf data
+        is_vl = output_mode.startswith("vl")
+        all_perf.append({"name": name, "ttft": tr.ttft, "tps": tr.tps,
+                         "wall": elapsed, "is_vl": is_vl,
+                         "cached": tr.prefix_cached_tokens})
         return tr
 
     # ── 1. Text ──
@@ -349,7 +424,8 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             {"type": "image_url", "image_url": {"url": img1_uri}},
             {"type": "text", "text": "What do you see in this image? Answer in one sentence."}
         ]}],
-        max_tokens=64)
+        max_tokens=64,
+        output_mode="vl_describe")
 
     # ── 3. VL + VL + Text ──
     run("vl+vl+text: first VL (3a)",
@@ -357,14 +433,16 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             {"type": "image_url", "image_url": {"url": img1_uri}},
             {"type": "text", "text": "List the main objects in one sentence."}
         ]}],
-        max_tokens=64)
+        max_tokens=64,
+        output_mode="vl_describe")
 
     run("vl+vl+text: second VL (3b)",
         [{"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": img2_uri}},
             {"type": "text", "text": "What type of content is in this image? Answer in one word."}
         ]}],
-        max_tokens=16)
+        max_tokens=16,
+        output_mode="vl_describe")
 
     run("vl+vl+text: text (3c)",
         [{"role": "user", "content": "What is 15 * 17? Answer with just the number."}],
@@ -380,7 +458,8 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             {"type": "image_url", "image_url": {"url": img1_uri}},
             {"type": "text", "text": "What is the dominant color? One word."}
         ]}],
-        max_tokens=32)
+        max_tokens=32,
+        output_mode="vl_describe")
 
     run("text+vl+text: text (4c)",
         [{"role": "user", "content": "What is the boiling point of water in Celsius? Just the number."}],
@@ -393,7 +472,8 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             {"type": "image_url", "image_url": {"url": img2_uri}},
             {"type": "text", "text": "Are these two images the same? Answer yes or no."}
         ]}],
-        max_tokens=128)
+        max_tokens=128,
+        output_mode="vl_describe")
 
     run("multi-img+text+multi-img: text (5b)",
         [{"role": "user", "content": "What is the speed of light in km/s? Just the number."}],
@@ -405,7 +485,8 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
             {"type": "image_url", "image_url": {"url": img1_uri}},
             {"type": "text", "text": "Which image contains a chart? Answer with one word: first or second."}
         ]}],
-        max_tokens=32)
+        max_tokens=32,
+        output_mode="vl_describe")
 
     # ── 6. Tool calling ──
     # 6a: Single tool call
@@ -721,7 +802,8 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
              {"type": "text", "text": "用中文描述这张图片，一句话。"}
          ]}],
         stream=True,
-        max_tokens=128)
+        max_tokens=128,
+        output_mode="vl_describe")
 
     # 8d: Multi-turn with image mid-conversation
     run("nebula: mid-conversation image (8d)",
@@ -732,7 +814,8 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
              {"type": "image_url", "image_url": {"url": img1_uri}},
              {"type": "text", "text": "这张图片里有什么？一句话回答。"}
          ]}],
-        max_tokens=128)
+        max_tokens=128,
+        output_mode="vl_describe")
 
     # 8e: Null content in assistant message (Nebula edge case)
     run("nebula: null assistant content (8e)",
@@ -894,7 +977,8 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
         tr = run(f"10-turn: {label} (turn {turn_num})",
                  list(messages_so_far),  # copy so mutations don't affect
                  max_tokens=32,
-                 expect_prefix_cache_min=expect_cache)
+                 expect_prefix_cache_min=expect_cache,
+                 output_mode="vl_describe" if is_vl else "text")
 
         # Append actual model response for next turn
         resp_content = tr.content if tr else ""
@@ -904,6 +988,40 @@ def run_tests(base_url: str, img1: Path, img2: Path, verbose: bool) -> list[tupl
     run("text: final check",
         [{"role": "user", "content": "Say hello in Japanese, Chinese, and Korean. Be brief."}],
         max_tokens=64)
+
+    # ── Performance Summary ──
+    if all_perf:
+        print(f"\n{'='*60}")
+        print("  PERFORMANCE SUMMARY")
+        print(f"{'='*60}")
+        text_perf = [p for p in all_perf if not p["is_vl"] and p["cached"] == 0]
+        vl_perf = [p for p in all_perf if p["is_vl"]]
+        cached_perf = [p for p in all_perf if p["cached"] > 0]
+
+        def _stats(items, field):
+            vals = [p[field] for p in items if p[field] > 0]
+            if not vals:
+                return "n/a"
+            avg = sum(vals) / len(vals)
+            mn, mx = min(vals), max(vals)
+            return f"avg={avg:.0f}, min={mn:.0f}, max={mx:.0f} (n={len(vals)})"
+
+        print(f"  Text TTFT     : {_stats(text_perf, 'ttft')}")
+        print(f"  Text TPS      : {_stats(text_perf, 'tps')}")
+        print(f"  VL TTFT       : {_stats(vl_perf, 'ttft')}")
+        print(f"  VL TPS        : {_stats(vl_perf, 'tps')}")
+        if cached_perf:
+            print(f"  Cached TTFT   : {_stats(cached_perf, 'ttft')}")
+
+        # Perf outlier warnings (TTFT > 3x category P50)
+        for cat_name, cat_items in [("text", text_perf), ("VL", vl_perf)]:
+            ttfts = sorted([p["ttft"] for p in cat_items if p["ttft"] > 0])
+            if len(ttfts) >= 3:
+                p50 = ttfts[len(ttfts) // 2]
+                for p in cat_items:
+                    if p["ttft"] > p50 * 3 and p["ttft"] > 500:
+                        print(f"  ⚠ PERF OUTLIER: {p['name']} — "
+                              f"TTFT {p['ttft']:.0f}ms > 3x P50 ({p50:.0f}ms)")
 
     return results
 

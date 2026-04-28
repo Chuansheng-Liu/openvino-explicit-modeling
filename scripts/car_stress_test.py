@@ -26,6 +26,14 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
+# Patterns that indicate a VL failure (model couldn't see the image)
+_VL_BLANK_PATTERNS = [
+    "blank", "white screen", "white background", "empty image",
+    "nothing to analyze", "no visible content", "no content",
+    "空白", "白屏", "什么都没有", "看不到内容", "没有内容",
+    "完全空白", "纯白",
+]
+
 # ── Helpers ──────────────────────────────────────────────────────────
 
 def image_to_data_uri(path: Path) -> str:
@@ -353,6 +361,25 @@ def run_stress(base_url: str, duration_sec: int, verbose: bool):
                     ok = False
                     detail = f"not JSON: {clean[:80]}"
 
+            # VL quality: blank-image detection
+            if is_vl and clean:
+                lower = clean.lower()
+                for pat in _VL_BLANK_PATTERNS:
+                    if pat in lower:
+                        ok = False
+                        detail += f"; VL blank-image: '{pat}'"
+                        break
+
+            # VL describe quality: check non-trivial output
+            if typ in ("vl_scene", "vl_pointing") and not expect_intent and len(clean) < 5:
+                ok = False
+                detail += "; VL output too short"
+
+            # Chat quality: check non-empty
+            if typ == "chat" and len(clean) < 2:
+                ok = False
+                detail += "; chat output empty"
+
             turn_info = {
                 "turn": turn_num, "conv": conversation_num, "label": label,
                 "type": typ, "is_vl": is_vl, "ttft": ttft, "tps": tps,
@@ -447,6 +474,20 @@ def print_and_write_report(turn_data, total_time, num_convs, report_path=None):
         print(f"\n  Failed turns ({len(failures)}):")
         for d in failures[:20]:
             print(f"    T{d['turn']}: {d['label']} — {d['detail']}")
+
+    # Perf outlier warnings (TTFT > 3x category P50)
+    perf_outliers = []
+    for cat, c in cats.items():
+        ttfts = sorted(c["ttfts"])
+        if len(ttfts) >= 3:
+            p50 = ttfts[len(ttfts) // 2]
+            for d in turn_data:
+                if d["type"] == cat and d["ttft"] > p50 * 3 and d["ttft"] > 500:
+                    perf_outliers.append(d)
+    if perf_outliers:
+        print(f"\n  ⚠ Perf outliers ({len(perf_outliers)}):")
+        for d in perf_outliers[:10]:
+            print(f"    T{d['turn']}: {d['label']} — TTFT {d['ttft']:.0f}ms")
 
     # Markdown report
     if report_path:

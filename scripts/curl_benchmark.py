@@ -317,6 +317,7 @@ def _run_prefix_phase(args, prompts, phase_name):
     print(f"  {'─'*4} {'─'*22} {'─'*8} {'─'*8} {'─'*7} {'─'*7} {'─'*30}")
 
     results = []
+    quality_issues = []
     for i, (prompt, expected_intent) in enumerate(prompts):
         user_content = f"{CAR_STATUS}\n<user_input>{prompt}</user_input>"
         messages = [
@@ -325,8 +326,43 @@ def _run_prefix_phase(args, prompts, phase_name):
         ]
         r = stream_request(args.host, args.port, messages)
 
-        output_short = r["output"].replace("\n", " ")[:40]
-        intent_ok = expected_intent in r["output"]
+        # Strip <think>...</think> tags for validation
+        import re as _re
+        clean = _re.sub(r"<think>.*?</think>\s*", "", r["output"], flags=_re.DOTALL).strip()
+        # Remove markdown code fences
+        if clean.startswith("```"):
+            lines = clean.split("\n")
+            lines = [l for l in lines if not l.strip().startswith("```")]
+            clean = "\n".join(lines).strip()
+
+        output_short = clean.replace("\n", " ")[:40]
+
+        # Proper JSON intent validation
+        intent_ok = False
+        if not clean:
+            quality_issues.append(f"  ⚠ #{i+1} '{prompt}': empty output")
+        else:
+            try:
+                parsed_json = json.loads(clean)
+                intent_ok = parsed_json.get("intent") == expected_intent
+            except json.JSONDecodeError:
+                # Try extracting first {...} block
+                if "{" in clean:
+                    start = clean.index("{")
+                    depth = 0
+                    for idx in range(start, len(clean)):
+                        if clean[idx] == "{":
+                            depth += 1
+                        elif clean[idx] == "}":
+                            depth -= 1
+                            if depth == 0:
+                                try:
+                                    pj = json.loads(clean[start:idx+1])
+                                    intent_ok = pj.get("intent") == expected_intent
+                                except Exception:
+                                    pass
+                                break
+
         marker = "✅" if intent_ok else "❌"
 
         print(f"  {i+1:<4d} {prompt:<22s} {r['ttft_ms']:>7.0f}ms {r['e2e_ms']:>7.0f}ms {r['tokens']:>7d} {r['tps']:>6.1f} {marker} {output_short}")
@@ -339,6 +375,16 @@ def _run_prefix_phase(args, prompts, phase_name):
     min_ttft = min(ttfts)
     max_ttft = max(ttfts)
     print(f"  {phase_name}: TTFT avg={avg_ttft:.0f}ms  min={min_ttft:.0f}ms  max={max_ttft:.0f}ms  (n={len(ttfts)})")
+
+    # Perf consistency warning
+    if len(ttfts) >= 3:
+        for j, t in enumerate(ttfts):
+            if t > avg_ttft * 3 and t > 500:
+                print(f"  ⚠ PERF OUTLIER: #{j+1} TTFT={t:.0f}ms > 3x avg ({avg_ttft:.0f}ms)")
+
+    for qi in quality_issues:
+        print(qi)
+
     return results
 
 
