@@ -254,7 +254,7 @@ def stream_request(host: str, port: int, messages: list,
 
 
 PREFIX_CACHE_PROMPTS = [
-    ("打开天窗", "vehicle_sunroof"),
+    ("开灯", "vehicle_light"),
     ("打开空调", "hvac_action"),
     ("把温度调到26度", "hvac_temp"),
     ("打开车门", "vehicle_door"),
